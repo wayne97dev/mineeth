@@ -366,6 +366,7 @@ export function Trade() {
             slippageBps={slippageBps}
             loading={quoteEnabled && !txInFlight && quoteRead.isFetching && quoteOut === undefined}
             failed={quoteFailed}
+            failureReason={quoteRead.error?.message}
             hasInput={parsedAmount > 0n}
           />
 
@@ -433,9 +434,10 @@ function QuotePreview(props: {
   slippageBps: number;
   loading: boolean;
   failed: boolean;
+  failureReason?: string;
   hasInput: boolean;
 }) {
-  const { mode, quoteOut, minReceived, slippageBps, loading, failed, hasInput } = props;
+  const { mode, quoteOut, minReceived, slippageBps, loading, failed, failureReason, hasInput } = props;
   const outLabel = mode === "buy" ? "PICK" : "ETH";
   const outDecimals = 18;
 
@@ -446,9 +448,14 @@ function QuotePreview(props: {
     );
   } else if (failed) {
     body = (
-      <span style={{ color: "var(--danger)" }}>
-        quote failed — pool may be too thin or not yet seeded
-      </span>
+      <div style={{ color: "var(--danger)" }}>
+        <div>quote failed — pool may be too thin or not yet seeded</div>
+        {failureReason && (
+          <div className="mt-1 break-all" style={{ color: "var(--fg-dim)", fontSize: "10px" }}>
+            {failureReason.split("\n")[0].slice(0, 200)}
+          </div>
+        )}
+      </div>
     );
   } else if (loading || quoteOut === undefined) {
     body = <span style={{ color: "var(--fg-muted)" }}>fetching quote…</span>;
