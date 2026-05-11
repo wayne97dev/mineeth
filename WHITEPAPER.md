@@ -202,6 +202,6 @@ The design draws directly from the `Hash` contract at `0xAC7b5d06fa1e77D08aea40d
 
 ## Status
 
-Sepolia testnet deployment: `0xa542e6d175cdbF24BCf2aa65a6E0d3496D4d60cC`, verified on Sepolia Etherscan, used to validate the contract's full lifecycle end-to-end.
+Sepolia testnet deployment: `0xf8bcf8AE88B2fd5a67d74a6eeb6c4b5A366AE0Cc`, verified on Sepolia Etherscan, used to validate the contract's full lifecycle end-to-end including the refund escape hatch.
 
 Mainnet deployment: not yet performed at the time of this writing. The mainnet address will be a different value because the V4 mainnet constructor arguments differ from Sepolia and therefore yield a different CREATE2 init-code hash, salt, and final address.
