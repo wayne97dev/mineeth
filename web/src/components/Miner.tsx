@@ -41,8 +41,8 @@ export function Miner() {
         <div className="panel-label">mining</div>
         <p className="mt-2 text-sm" style={{ color: "var(--fg-muted)" }}>
           Each wallet gets its own challenge: solutions are unstealable from
-          the mempool. The miner runs in your browser via {cores} WASM
-          worker{cores > 1 ? "s" : ""}.
+          the mempool. The miner runs in your browser via WASM workers
+          across all your CPU cores.
         </p>
       </div>
 

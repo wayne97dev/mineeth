@@ -1,11 +1,9 @@
 import type { Address } from "viem";
 
-// Placeholder: replace with the actual deployed address once the mainnet
-// deploy completes. The CREATE2 prediction from `forge script script/Deploy.s.sol`
-// gave 0x706be6AC92f5a9b287292ec72F2D37381448a0Cc but this is sensitive to
-// any change in initCode (token name, constructor args, compiler settings).
-// Recompute the prediction immediately before deploying.
-export const PICK_ADDRESS: Address = "0x0000000000000000000000000000000000000000";
+// Current testnet deployment (Sepolia, chainId 11155111). Block 10834446.
+// Mainnet deploy will use a different address (different V4 constructor args
+// produce a different CREATE2 init-code hash → different salt+address).
+export const PICK_ADDRESS: Address = "0xa542e6d175cdbF24BCf2aa65a6E0d3496D4d60cC";
 
 export const PICK_DECIMALS = 18;
 export const PICK_SYMBOL = "PICK";
