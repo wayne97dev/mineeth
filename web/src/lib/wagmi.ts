@@ -8,6 +8,7 @@ import { http } from "viem";
 const projectId = process.env.NEXT_PUBLIC_WC_PROJECT_ID ?? "PLACEHOLDER";
 
 const rpcMainnet = process.env.NEXT_PUBLIC_MAINNET_RPC;
+const rpcSepolia = process.env.NEXT_PUBLIC_SEPOLIA_RPC;
 
 export const config = getDefaultConfig({
   appName: "PICK",
@@ -16,7 +17,7 @@ export const config = getDefaultConfig({
   chains: [sepolia, mainnet],
   transports: {
     [mainnet.id]: rpcMainnet ? http(rpcMainnet) : http(),
-    [sepolia.id]: http(),
+    [sepolia.id]: rpcSepolia ? http(rpcSepolia) : http(),
   },
   ssr: true,
 });
