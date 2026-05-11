@@ -11,6 +11,29 @@ function formatRate(hps: number): string {
   return `${hps.toFixed(0)} H/s`;
 }
 
+function formatDuration(sec: number): string {
+  if (!isFinite(sec) || sec <= 0) return "—";
+  if (sec < 1) return "<1s";
+  if (sec < 60) return `${Math.round(sec)}s`;
+  if (sec < 3600) {
+    const m = Math.floor(sec / 60);
+    const s = Math.round(sec - m * 60);
+    return `${m}m ${s}s`;
+  }
+  const h = Math.floor(sec / 3600);
+  const m = Math.round((sec - h * 3600) / 60);
+  return `${h}h ${m}m`;
+}
+
+function formatHashesShort(n: bigint): string {
+  const x = Number(n);
+  if (!isFinite(x)) return n.toString();
+  if (x >= 1e9) return `${(x / 1e9).toFixed(2)}B`;
+  if (x >= 1e6) return `${(x / 1e6).toFixed(2)}M`;
+  if (x >= 1e3) return `${(x / 1e3).toFixed(1)}k`;
+  return `${x}`;
+}
+
 export function Miner() {
   const { isConnected } = useAccount();
 
@@ -25,7 +48,10 @@ export function Miner() {
   const {
     status,
     hashrate,
-    cores,
+    totalHashes,
+    epochRollover,
+    epochBlocksLeft,
+    expectedSecondsToSolve,
     challenge,
     error,
     txHash,
@@ -88,6 +114,41 @@ export function Miner() {
               </div>
             </div>
           </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="panel p-3" style={{ background: "var(--bg)" }}>
+              <div className="panel-label">eta</div>
+              <div className="font-mono text-sm mt-1">
+                {running ? formatDuration(expectedSecondsToSolve) : "—"}
+              </div>
+            </div>
+            <div className="panel p-3" style={{ background: "var(--bg)" }}>
+              <div className="panel-label">total hashes</div>
+              <div className="font-mono text-sm mt-1">
+                {running ? formatHashesShort(totalHashes) : "—"}
+              </div>
+            </div>
+            <div className="panel p-3" style={{ background: "var(--bg)" }}>
+              <div className="panel-label">epoch ends in</div>
+              <div className="font-mono text-sm mt-1">
+                {epochBlocksLeft !== undefined ? `${epochBlocksLeft.toString()} blk` : "—"}
+              </div>
+            </div>
+          </div>
+
+          {epochRollover && running && (
+            <div
+              className="font-mono text-xs px-3 py-2 rounded-sm"
+              style={{
+                background: "rgba(244, 196, 48, 0.08)",
+                border: "1px solid var(--accent)",
+                color: "var(--accent)",
+              }}
+            >
+              epoch rolled over — workers restarted with the new challenge,
+              no gas wasted
+            </div>
+          )}
 
           {running ? (
             <button onClick={stop} className="btn w-full">

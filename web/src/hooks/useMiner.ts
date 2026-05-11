@@ -23,23 +23,21 @@ type MinerStatus =
   | "won"
   | "error";
 
-// Each worker hashes BATCH_SIZE nonces before reporting back and giving the
-// event loop a chance to deliver "stop" messages. Bigger = better throughput
-// but slower stop latency.
 const BATCH_SIZE = 50_000n;
 
 // Spread workers across the 64-bit nonce space so they never collide.
 const WORKER_STRIDE = 1n << 56n;
 
 export function useMiner() {
-  const { address, isConnected } = useAccount();
+  const { isConnected } = useAccount();
+  const { address } = useAccount();
 
   const { data: challenge, refetch: refetchChallenge } = useReadContract({
     address: PICK_ADDRESS,
     abi: pickAbi,
     functionName: "getChallenge",
     args: address ? [address] : undefined,
-    query: { enabled: !!address },
+    query: { enabled: !!address, refetchInterval: 12_000 },
   });
 
   const { data: difficulty } = useReadContract({
@@ -49,13 +47,24 @@ export function useMiner() {
     query: { refetchInterval: 24_000 },
   });
 
+  const { data: miningState } = useReadContract({
+    address: PICK_ADDRESS,
+    abi: pickAbi,
+    functionName: "miningState",
+    query: { refetchInterval: 12_000 },
+  });
+  const epochBlocksLeft = (miningState as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint] | undefined)?.[6];
+
   const [status, setStatus] = useState<MinerStatus>("idle");
   const [hashrate, setHashrate] = useState(0);
+  const [totalHashes, setTotalHashes] = useState<bigint>(0n);
+  const [epochRollover, setEpochRollover] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const workersRef = useRef<Worker[]>([]);
   const totalHashesRef = useRef<bigint>(0n);
   const rateWindowRef = useRef<{ hashes: bigint; t0: number } | null>(null);
+  const totalHashesTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { writeContractAsync } = useWriteContract();
   const [txHash, setTxHash] = useState<Hex | undefined>();
@@ -78,6 +87,19 @@ export function useMiner() {
     []
   );
 
+  // Expected time to find a solution (seconds) given current hashrate +
+  // difficulty target. Returns Infinity for hashrate=0 or unknown difficulty.
+  const expectedSecondsToSolve = useMemo<number>(() => {
+    if (!difficulty || hashrate === 0) return Infinity;
+    const d = difficulty as bigint;
+    if (d === 0n) return Infinity;
+    // expected_hashes = 2^256 / difficulty
+    const expectedHashes = (2n ** 256n) / d;
+    const expectedHashesNum = Number(expectedHashes);
+    if (!isFinite(expectedHashesNum)) return Infinity;
+    return expectedHashesNum / hashrate;
+  }, [difficulty, hashrate]);
+
   const stop = useCallback(() => {
     workersRef.current.forEach((w) => {
       w.postMessage({ type: "stop" });
@@ -86,8 +108,12 @@ export function useMiner() {
     workersRef.current = [];
     setHashrate(0);
     rateWindowRef.current = null;
-    if (status === "mining") setStatus("idle");
-  }, [status]);
+    if (totalHashesTimerRef.current) {
+      clearInterval(totalHashesTimerRef.current);
+      totalHashesTimerRef.current = null;
+    }
+    setStatus((s) => (s === "mining" ? "idle" : s));
+  }, []);
 
   const submit = useCallback(
     async (nonce: bigint) => {
@@ -113,8 +139,10 @@ export function useMiner() {
   const start = useCallback(() => {
     if (!isConnected || !challenge || !difficulty) return;
     setError(null);
+    setEpochRollover(false);
     setStatus("mining");
     totalHashesRef.current = 0n;
+    setTotalHashes(0n);
     rateWindowRef.current = { hashes: 0n, t0: performance.now() };
 
     const challengeBytes = hexToBytes(challenge as Hex);
@@ -139,12 +167,15 @@ export function useMiner() {
             }
           }
         } else if (msg.type === "solution") {
-          // First solution wins — stop all workers, submit.
           workers.forEach((w) => {
             w.postMessage({ type: "stop" });
             w.terminate();
           });
           workersRef.current = [];
+          if (totalHashesTimerRef.current) {
+            clearInterval(totalHashesTimerRef.current);
+            totalHashesTimerRef.current = null;
+          }
           submit(msg.nonce);
         }
       };
@@ -160,19 +191,54 @@ export function useMiner() {
       workers.push(worker);
     }
     workersRef.current = workers;
+
+    // Mirror the running total into state every 500ms so the UI can show it
+    // without re-rendering on every progress message.
+    if (totalHashesTimerRef.current) clearInterval(totalHashesTimerRef.current);
+    totalHashesTimerRef.current = setInterval(() => {
+      setTotalHashes(totalHashesRef.current);
+    }, 500);
   }, [isConnected, challenge, difficulty, cores, submit]);
+
+  // Auto-restart workers when the challenge rolls over to a new epoch.
+  // Without this, workers keep grinding for the old challenge and the eventual
+  // mine() tx reverts with InsufficientWork (since the contract recomputes the
+  // challenge using the current epoch).
+  const startRef = useRef(start);
+  const stopRef = useRef(stop);
+  useEffect(() => { startRef.current = start; }, [start]);
+  useEffect(() => { stopRef.current = stop; }, [stop]);
+
+  const prevChallengeRef = useRef<Hex | undefined>(undefined);
+  useEffect(() => {
+    const prev = prevChallengeRef.current;
+    const current = challenge as Hex | undefined;
+    prevChallengeRef.current = current;
+    if (!prev || !current || prev === current) return;
+    if (status !== "mining") return;
+    // Epoch rolled over mid-mining: stop and re-start with the new challenge.
+    setEpochRollover(true);
+    stopRef.current();
+    const t = setTimeout(() => startRef.current(), 120);
+    return () => clearTimeout(t);
+  }, [challenge, status]);
 
   // Always terminate workers on unmount.
   useEffect(() => {
     return () => {
       workersRef.current.forEach((w) => w.terminate());
       workersRef.current = [];
+      if (totalHashesTimerRef.current) clearInterval(totalHashesTimerRef.current);
     };
   }, []);
 
   return {
     status,
     hashrate,
+    totalHashes,
+    epochRollover,
+    epochBlocksLeft,
+    expectedSecondsToSolve,
     cores,
     challenge: challenge as Hex | undefined,
     difficulty: difficulty as bigint | undefined,
