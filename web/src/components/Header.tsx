@@ -13,7 +13,14 @@ export function Header() {
           <nav className="hidden sm:flex gap-7">
             <a href="#genesis" className="nav-link">genesis</a>
             <a href="#mine" className="nav-link">mine</a>
-            <a href="#docs" className="nav-link">docs</a>
+            <a
+              href="/whitepaper.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="nav-link"
+            >
+              whitepaper
+            </a>
           </nav>
         </div>
         <ConnectWallet />
