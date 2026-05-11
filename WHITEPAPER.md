@@ -92,6 +92,44 @@ The mining schedule halves every 100,000 successful mints. Era zero pays 100 PIC
 
 Target throughput is one mint per minute on average. With Ethereum's twelve-second blocks, that translates to a difficulty retarget every 33.6 hours of real time, assuming the network mines at exactly the target rate. The retarget mechanism corrects for deviations within a factor of four per period.
 
+## Seeding strategy
+
+Seeding the pool is the only timed decision the controller has to make. Two functions enable it:
+
+```
+seedPool()    — permissionless, requires genesisMinted == GENESIS_CAP
+partialSeed() — controller only, requires block.timestamp >= deployedAt + 30 minutes
+```
+
+Both functions call the same internal logic. The only difference is whether the genesis has reached the full 1,050,000 PICK cap or not. `seedPool` is the happy path where the community fills the cap on its own; `partialSeed` is the controller's escape hatch when genesis stalls.
+
+The interesting property of `partialSeed` is what it does with the unsold genesis allocation. The body uses `genesisMinted`, not `GENESIS_CAP`:
+
+```solidity
+function _seedBody() internal {
+    uint256 eth    = genesisEthRaised;
+    uint256 pickLP = genesisMinted;
+    _mint(address(this), pickLP + MINING_SUPPLY);
+    // create the pool with (eth, pickLP) as liquidity
+}
+```
+
+The unsold genesis PICK is never minted. Not burned, not held by the controller, not stuck in storage. It simply does not exist. If genesis stops at 300,000 PICK sold, the contract's total supply becomes 300,000 plus 18,900,000 = 19,200,000 PICK, and the pool receives 300,000 PICK paired against whatever ETH was raised at that point.
+
+This is clean from a contract-design perspective. No surplus tokens to manage, no governance over unsold inventory, no airdrops to plan. The 30-minute delay on `partialSeed` is the only anti-grief constraint: it prevents the controller from instantly seeding an empty pool, which would yield zero liquidity and break the AMM. The `genesisMinted > 0` check is the same idea: at least one external buyer must have participated.
+
+The downside of early seeding is economic, not technical. The mining supply is fixed at 18,900,000 PICK regardless of how much genesis sold. The LP side scales linearly with genesis sales. Seeding at 30% means the pool is roughly one third the size it would be at full sell-out, and miners produce new supply at the same rate either way. A thin pool combined with active mining means each mined block pushes the price down harder than it would against a deep pool.
+
+Three strategies are reasonable.
+
+**Strict sell-out.** Wait for genesis to hit the full cap before seeding. Anyone can call `seedPool` at that point, so the call costs the controller nothing. Maximum pool depth, maximum credibility, but the timeline is uncertain. If the sale stalls below the cap, trading and mining never open.
+
+**Threshold seed.** The controller commits publicly to seeding when genesis reaches a chosen threshold, for example 50% or 70%. The threshold acts as a coordination point: buyers know how much further the sale has to go before trading opens, and they can pile in if they want the gap closed. The controller publishes a deadline as a fallback, for instance "if 70% is not reached by day seven, `partialSeed` is called at the current level".
+
+**Aggressive early seed.** Seed within hours of deploy regardless of how much sold. Trading and mining open immediately, but the pool is tiny and slippage is severe. Useful only when the project's appeal depends on the miner being live at launch and the controller is willing to accept a fragile initial market.
+
+The contract enforces none of these. The controller's discretion within the time gate is total. The recommendation is the threshold strategy with a published target and deadline, because it gives the community a number to rally around and removes the open-ended uncertainty of waiting for a strict sell-out that may never come.
+
 ## Verification
 
 The contract source is published under the MIT license alongside its build configuration. After deployment to any chain, the source can be verified on Etherscan, Sourcify, or any compatible explorer. The compiled bytecode, the constructor arguments, and the CREATE2 salt are reproducible from the source.
