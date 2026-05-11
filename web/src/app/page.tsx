@@ -1,11 +1,15 @@
+import { NetworkBanner } from "@/components/NetworkBanner";
 import { Header } from "@/components/Header";
 import { Stats } from "@/components/Stats";
+import { RecentMints } from "@/components/RecentMints";
 import { Genesis } from "@/components/Genesis";
 import { Miner } from "@/components/Miner";
+import { Trade } from "@/components/Trade";
 
 export default function Page() {
   return (
     <>
+      <NetworkBanner />
       <Header />
       <main className="max-w-5xl mx-auto px-6 py-10 space-y-8">
         <section>
@@ -22,10 +26,14 @@ export default function Page() {
 
         <Stats />
 
+        <RecentMints />
+
         <div className="grid md:grid-cols-2 gap-6">
           <Genesis />
           <Miner />
         </div>
+
+        <Trade />
 
         <footer className="pt-8 border-t font-mono text-xs space-y-1"
                 style={{ borderColor: "var(--border)", color: "var(--fg-muted)" }}>

@@ -89,14 +89,20 @@ export function Stats() {
   const miningSupply = reads.data?.[2]?.result as bigint | undefined;
   const genesisCap = reads.data?.[3]?.result as bigint | undefined;
 
-  const isUnreadable = reads.isError || !reads.data?.[0]?.result;
-
-  if (isUnreadable) {
+  if (reads.isLoading || (!reads.data && !reads.isError)) {
     return (
       <div className="panel p-4 text-sm font-mono" style={{ color: "var(--fg-muted)" }}>
-        Contract not yet deployed (or address not configured). Update{" "}
-        <code style={{ color: "var(--accent)" }}>web/src/lib/contract.ts</code>{" "}
-        with the deployed address.
+        loading on-chain state…
+      </div>
+    );
+  }
+
+  const firstReadFailed = reads.data?.[0]?.status === "failure" || !reads.data?.[0]?.result;
+  if (reads.isError || firstReadFailed) {
+    return (
+      <div className="panel p-4 text-sm font-mono" style={{ color: "var(--fg-muted)" }}>
+        Contract not reachable. Either the deployed address is not configured
+        yet, or your wallet is on the wrong network.
       </div>
     );
   }
