@@ -7,7 +7,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
-import { parseEther } from "viem";
+import { parseEther, formatUnits } from "viem";
 import { pickAbi } from "@/lib/pickAbi";
 import { PICK_ADDRESS } from "@/lib/contract";
 
@@ -16,8 +16,9 @@ const TOKENS_PER_UNIT = 1000;
 const MAX_UNITS_PER_TX = 5;
 
 export function Genesis() {
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const [units, setUnits] = useState(1);
+  const [refundUnits, setRefundUnits] = useState(1);
 
   const { data: genesis } = useReadContract({
     address: PICK_ADDRESS,
@@ -26,6 +27,23 @@ export function Genesis() {
     query: { refetchInterval: 12_000 },
   });
   const complete = (genesis as readonly [bigint, bigint, bigint, boolean] | undefined)?.[3] ?? false;
+
+  const { data: refundOpen } = useReadContract({
+    address: PICK_ADDRESS,
+    abi: pickAbi,
+    functionName: "refundUnlocked",
+    query: { refetchInterval: 60_000 },
+  });
+
+  const { data: userBalance } = useReadContract({
+    address: PICK_ADDRESS,
+    abi: pickAbi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address && (refundOpen as boolean) === true, refetchInterval: 12_000 },
+  });
+  const userPick = (userBalance as bigint | undefined) ?? 0n;
+  const userUnits = userPick / 1000n / 10n ** 18n; // floor divide to whole units
 
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
   const { isLoading: isMining, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
@@ -52,6 +70,15 @@ export function Genesis() {
       functionName: "mintGenesis",
       args: [BigInt(units)],
       value: parseEther(cost),
+    });
+  }
+
+  function handleRefund() {
+    writeContract({
+      address: PICK_ADDRESS,
+      abi: pickAbi,
+      functionName: "refundGenesis",
+      args: [BigInt(refundUnits) * BigInt(TOKENS_PER_UNIT) * 10n ** 18n],
     });
   }
 
@@ -113,6 +140,57 @@ export function Genesis() {
                 ? "minted ✓ (mint more?)"
                 : `mint ${units} unit${units > 1 ? "s" : ""}`}
       </button>
+
+      {(refundOpen as boolean) === true && userUnits > 0n && (
+        <div className="pt-4 mt-2 border-t space-y-3"
+             style={{ borderColor: "var(--border)" }}>
+          <div>
+            <div className="panel-label">refund (grace open)</div>
+            <p className="mt-1 text-xs" style={{ color: "var(--fg-muted)" }}>
+              Three days have passed without the pool being seeded. You can
+              burn your genesis PICK back for the ETH you paid. You currently
+              hold {formatUnits(userPick, 18)} PICK ({userUnits.toString()}{" "}
+              unit{userUnits === 1n ? "" : "s"} refundable).
+            </p>
+          </div>
+
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <label className="panel-label">refund units</label>
+              <div className="flex gap-2 mt-1">
+                {[1, 2, 3, 4, 5].map((u) => (
+                  <button
+                    key={u}
+                    onClick={() => setRefundUnits(u)}
+                    disabled={BigInt(u) > userUnits}
+                    className={`btn flex-1 ${refundUnits === u ? "btn-primary" : ""}`}
+                    style={BigInt(u) > userUnits ? { opacity: 0.3 } : undefined}
+                  >
+                    {u}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleRefund}
+            disabled={!isConnected || isPending || isMining || BigInt(refundUnits) > userUnits}
+            className="btn w-full"
+            style={{
+              background: "transparent",
+              borderColor: "var(--danger)",
+              color: "var(--danger)",
+            }}
+          >
+            {isPending
+              ? "confirm in wallet…"
+              : isMining
+                ? "refunding…"
+                : `refund ${refundUnits} unit${refundUnits > 1 ? "s" : ""} (${(PRICE_PER_UNIT_ETH * refundUnits).toFixed(2)} ETH back)`}
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="text-xs font-mono" style={{ color: "var(--danger)" }}>

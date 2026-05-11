@@ -65,6 +65,12 @@ contract Pick is ERC20, IHooks, ReentrancyGuard {
 
     uint256 public constant PARTIAL_SEED_DELAY = 30 minutes;
 
+    /// @notice Window after deploy after which any genesis buyer can call
+    ///         `refundGenesis` to redeem their PICK for the ETH they paid,
+    ///         provided the pool has not yet been seeded. Acts as a safety
+    ///         net if `seedPool` / `partialSeed` cannot complete.
+    uint256 public constant REFUND_GRACE = 3 days;
+
     IPoolManager public immutable poolManager;
     address      public immutable positionManager;
     address      public immutable permit2;
@@ -108,6 +114,8 @@ contract Pick is ERC20, IHooks, ReentrancyGuard {
     error WrongPairConfig();
     error TooSoon();
     error NothingToSeed();
+    error RefundGraceNotPassed();
+    error MustBeUnitMultiple();
 
     event GenesisMint(address indexed buyer, uint256 ethPaid, uint256 hashOut);
     event PoolSeeded(uint256 eth, uint256 hash, uint160 sqrtPriceX96);
@@ -117,6 +125,7 @@ contract Pick is ERC20, IHooks, ReentrancyGuard {
     event Halving(uint256 era, uint256 newReward);
     event FeeCollected(address indexed origin, bool isBuy, uint256 fee);
     event FeesClaimed(address indexed to, uint256 amount);
+    event GenesisRefund(address indexed buyer, uint256 ethReturned, uint256 pickBurned);
 
     constructor(
         IPoolManager poolManager_,
@@ -153,6 +162,33 @@ contract Pick is ERC20, IHooks, ReentrancyGuard {
 
         _mint(msg.sender, pickAmount);
         emit GenesisMint(msg.sender, cost, pickAmount);
+    }
+
+    /// @notice Genesis buyer escape hatch. After `REFUND_GRACE` from deploy,
+    ///         if the pool has not been seeded yet, holders of genesis PICK
+    ///         can burn their balance back to the contract and recover the
+    ///         ETH at the original 0.01 ETH / 1,000 PICK price. Useful when
+    ///         seeding is technically blocked and would otherwise lock
+    ///         buyer ETH on the contract forever.
+    function refundGenesis(uint256 pickAmount) external nonReentrant {
+        if (genesisComplete)                                  revert GenesisAlreadyComplete();
+        if (block.timestamp < deployedAt + REFUND_GRACE)      revert RefundGraceNotPassed();
+        if (pickAmount == 0 || pickAmount % GENESIS_UNIT != 0) revert MustBeUnitMultiple();
+
+        uint256 units   = pickAmount / GENESIS_UNIT;
+        uint256 ethBack = units * GENESIS_PRICE;
+
+        // Reverts if the caller does not hold `pickAmount`.
+        _burn(msg.sender, pickAmount);
+
+        // Decrement counters so a later `partialSeed` reflects post-refund state.
+        genesisMinted    -= pickAmount;
+        genesisEthRaised -= ethBack;
+
+        (bool ok,) = msg.sender.call{value: ethBack}("");
+        if (!ok) revert EthTransferFailed();
+
+        emit GenesisRefund(msg.sender, ethBack, pickAmount);
     }
 
     function seedPool() external nonReentrant {
@@ -455,6 +491,13 @@ contract Pick is ERC20, IHooks, ReentrancyGuard {
         remaining = GENESIS_CAP - genesisMinted;
         ethRaised = genesisEthRaised;
         complete  = genesisComplete;
+    }
+
+    /// @notice True iff `refundGenesis` is currently callable. The window
+    ///         opens at `deployedAt + REFUND_GRACE` and stays open until the
+    ///         pool is seeded.
+    function refundUnlocked() external view returns (bool) {
+        return !genesisComplete && block.timestamp >= deployedAt + REFUND_GRACE;
     }
 
     function _sqrtPriceX96FromAmounts(uint256 amount0, uint256 amount1)

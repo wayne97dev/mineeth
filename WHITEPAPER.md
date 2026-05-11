@@ -28,7 +28,7 @@ The contract moves through four phases in its lifetime.
 
 **Phase 0, Empty.** The contract is deployed and holds nothing. Constructor parameters set the addresses of the Uniswap V4 PoolManager, PositionManager, and Permit2 for the target chain. The deployer becomes the `controller`, the only address with permission to claim accumulated swap fees later. No other state is mutable from outside.
 
-**Phase 1, Genesis.** Anyone can call `mintGenesis(units)` with `units * 0.01 ETH`. Each unit yields 1,000 PICK, capped at five units per transaction. The transaction cap exists so a single mempool slot cannot sweep the entire allocation in one go. Excess ETH is refunded in the same call.
+**Phase 1, Genesis.** Anyone can call `mintGenesis(units)` with `units * 0.01 ETH`. Each unit yields 1,000 PICK, capped at five units per transaction. The transaction cap exists so a single mempool slot cannot sweep the entire allocation in one go. Excess ETH is refunded in the same call. Three days after deploy, if the pool has not been seeded, `refundGenesis` opens and lets any holder of genesis PICK redeem it back for ETH at the original price (see Refund escape hatch).
 
 **Phase 2, Seeding.** Once the genesis cap of 1,050,000 PICK is sold out, anyone can call `seedPool()`. The function mints the remaining 19,950,000 PICK to the contract itself, creates the V4 PICK/ETH pool with the contract as its hook, deposits all genesis ETH plus 1,050,000 PICK as liquidity, and sets the initial mining difficulty. The LP position NFT is minted to the controller. A fallback `partialSeed()` exists for the case where genesis stalls below the cap; it can be called by the controller no earlier than thirty minutes after deploy.
 
@@ -129,6 +129,46 @@ Three strategies are reasonable.
 **Aggressive early seed.** Seed within hours of deploy regardless of how much sold. Trading and mining open immediately, but the pool is tiny and slippage is severe. Useful only when the project's appeal depends on the miner being live at launch and the controller is willing to accept a fragile initial market.
 
 The contract enforces none of these. The controller's discretion within the time gate is total. The recommendation is the threshold strategy with a published target and deadline, because it gives the community a number to rally around and removes the open-ended uncertainty of waiting for a strict sell-out that may never come.
+
+## Refund escape hatch
+
+The genesis sale collects ETH on the contract and trusts that one of the seed functions will eventually be called. If neither succeeds, the ETH would otherwise be locked forever. A buyer with no recourse is exposed to two distinct failure modes: a controller who disappears, and a controller who tries to seed but cannot because of a V4 edge case the fork tests missed.
+
+`refundGenesis` exists to cover both:
+
+```solidity
+function refundGenesis(uint256 pickAmount) external nonReentrant {
+    if (genesisComplete)                                  revert GenesisAlreadyComplete();
+    if (block.timestamp < deployedAt + REFUND_GRACE)      revert RefundGraceNotPassed();
+    if (pickAmount == 0 || pickAmount % GENESIS_UNIT != 0) revert MustBeUnitMultiple();
+
+    uint256 units   = pickAmount / GENESIS_UNIT;
+    uint256 ethBack = units * GENESIS_PRICE;
+
+    _burn(msg.sender, pickAmount);
+    genesisMinted    -= pickAmount;
+    genesisEthRaised -= ethBack;
+
+    (bool ok,) = msg.sender.call{value: ethBack}("");
+    if (!ok) revert EthTransferFailed();
+
+    emit GenesisRefund(msg.sender, ethBack, pickAmount);
+}
+```
+
+`REFUND_GRACE` is fixed at 3 days. Any holder of genesis-minted PICK can call `refundGenesis(amount)` once the grace has passed, provided the pool has not yet been seeded. The function burns the caller's PICK and returns ETH at the original 0.01 ETH per 1,000 PICK rate. Multiple partial refunds are permitted.
+
+Three properties keep the function safe.
+
+The function is gated on `!genesisComplete`. After `seedPool` or `partialSeed` runs, the ETH is no longer on the contract; it is liquidity in the V4 pool, locked by the hook, unreachable. Refunds become impossible from that moment forward, by design. Holders who want out post-seed sell into the pool at the AMM price.
+
+The unit-multiple check forces `pickAmount` to be a multiple of 1,000 PICK. This avoids rounding issues and matches the genesis purchase granularity exactly. Half-unit refunds would create dust counters that drift apart from `genesisEthRaised`.
+
+The `_burn` happens before the ETH transfer. Reentrancy through the recipient cannot replay a refund the caller has not first burned. Combined with the `nonReentrant` modifier, this leaves no path for double-spending the position.
+
+The three-day window is short enough that a committed controller can seed before refunds open. A buyer who panics on day one cannot exit through this function; they have to live with the position until the pool opens or the grace expires. The window is long enough that a controller in good faith has time to debug a failing `partialSeed` and retry without being interrupted by refund traffic competing for the same ETH balance.
+
+After three days, if seeding has not succeeded, the system effectively becomes a no-op refund market. Genesis buyers withdraw, the contract's ETH balance trends to zero, and the deployment is over. No tokens were minted to anyone who has not since burned them back.
 
 ## Verification
 

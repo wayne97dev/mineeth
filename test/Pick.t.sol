@@ -180,6 +180,121 @@ contract PickTest is Test {
         pick.mintGenesis{value: 0.005 ether}(1);
     }
 
+    function test_refund_revertsBeforeGrace() public {
+        vm.store(address(pick), bytes32(SLOT_GENESIS_COMPLETE), bytes32(uint256(0)));
+        address buyer = address(0xABCD);
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        pick.mintGenesis{value: 0.01 ether}(1);
+
+        vm.prank(buyer);
+        vm.expectRevert(Pick.RefundGraceNotPassed.selector);
+        pick.refundGenesis(1_000e18);
+    }
+
+    function test_refund_revertsAfterGenesisComplete() public {
+        vm.store(address(pick), bytes32(SLOT_GENESIS_COMPLETE), bytes32(uint256(0)));
+        address buyer = address(0xABCD);
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        pick.mintGenesis{value: 0.01 ether}(1);
+        vm.store(address(pick), bytes32(SLOT_GENESIS_COMPLETE), bytes32(uint256(1)));
+
+        vm.warp(block.timestamp + 3 days + 1);
+        vm.prank(buyer);
+        vm.expectRevert(Pick.GenesisAlreadyComplete.selector);
+        pick.refundGenesis(1_000e18);
+    }
+
+    function test_refund_revertsForNonUnitMultiple() public {
+        vm.store(address(pick), bytes32(SLOT_GENESIS_COMPLETE), bytes32(uint256(0)));
+        address buyer = address(0xABCD);
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        pick.mintGenesis{value: 0.01 ether}(1);
+
+        vm.warp(block.timestamp + 3 days + 1);
+        vm.prank(buyer);
+        vm.expectRevert(Pick.MustBeUnitMultiple.selector);
+        pick.refundGenesis(500e18); // half a unit
+    }
+
+    function test_refund_revertsForZero() public {
+        vm.store(address(pick), bytes32(SLOT_GENESIS_COMPLETE), bytes32(uint256(0)));
+        vm.warp(block.timestamp + 3 days + 1);
+        vm.prank(address(0xABCD));
+        vm.expectRevert(Pick.MustBeUnitMultiple.selector);
+        pick.refundGenesis(0);
+    }
+
+    function test_refund_successfulFullUnit() public {
+        vm.store(address(pick), bytes32(SLOT_GENESIS_COMPLETE), bytes32(uint256(0)));
+        address buyer = address(0xABCD);
+        vm.deal(buyer, 1 ether);
+
+        vm.prank(buyer);
+        pick.mintGenesis{value: 0.01 ether}(1);
+        assertEq(pick.balanceOf(buyer), 1_000e18);
+        assertEq(buyer.balance, 0.99 ether);
+
+        vm.warp(block.timestamp + 3 days + 1);
+        vm.prank(buyer);
+        pick.refundGenesis(1_000e18);
+
+        assertEq(pick.balanceOf(buyer), 0, "pick should be burned");
+        assertEq(buyer.balance, 1 ether, "eth should be returned");
+        assertEq(pick.genesisMinted(), 0);
+        assertEq(pick.genesisEthRaised(), 0);
+    }
+
+    function test_refund_partialOfFiveUnits() public {
+        vm.store(address(pick), bytes32(SLOT_GENESIS_COMPLETE), bytes32(uint256(0)));
+        address buyer = address(0xABCD);
+        vm.deal(buyer, 1 ether);
+
+        vm.prank(buyer);
+        pick.mintGenesis{value: 0.05 ether}(5);
+        assertEq(pick.balanceOf(buyer), 5_000e18);
+        assertEq(pick.genesisMinted(), 5_000e18);
+        assertEq(pick.genesisEthRaised(), 0.05 ether);
+
+        vm.warp(block.timestamp + 3 days + 1);
+        vm.prank(buyer);
+        pick.refundGenesis(2_000e18);
+
+        assertEq(pick.balanceOf(buyer), 3_000e18, "keeps 3 units worth");
+        assertEq(buyer.balance, 0.97 ether, "0.02 eth back over the 0.95 untouched");
+        assertEq(pick.genesisMinted(), 3_000e18);
+        assertEq(pick.genesisEthRaised(), 0.03 ether);
+    }
+
+    function test_refund_doubleSpendReverts() public {
+        vm.store(address(pick), bytes32(SLOT_GENESIS_COMPLETE), bytes32(uint256(0)));
+        address buyer = address(0xABCD);
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        pick.mintGenesis{value: 0.01 ether}(1);
+
+        vm.warp(block.timestamp + 3 days + 1);
+        vm.prank(buyer);
+        pick.refundGenesis(1_000e18);
+
+        vm.prank(buyer);
+        vm.expectRevert();
+        pick.refundGenesis(1_000e18);
+    }
+
+    function test_refundUnlocked_view() public {
+        vm.store(address(pick), bytes32(SLOT_GENESIS_COMPLETE), bytes32(uint256(0)));
+        assertFalse(pick.refundUnlocked(), "before grace");
+
+        vm.warp(block.timestamp + 3 days + 1);
+        assertTrue(pick.refundUnlocked(), "after grace, pre-seed");
+
+        vm.store(address(pick), bytes32(SLOT_GENESIS_COMPLETE), bytes32(uint256(1)));
+        assertFalse(pick.refundUnlocked(), "after seed");
+    }
+
     function test_constants() public view {
         assertEq(pick.TOTAL_SUPPLY(), 21_000_000e18);
         assertEq(pick.MINING_SUPPLY(), 18_900_000e18);
