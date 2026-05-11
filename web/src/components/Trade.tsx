@@ -22,14 +22,17 @@ import {
 import { pickAbi } from "@/lib/pickAbi";
 import { PICK_ADDRESS } from "@/lib/contract";
 
+// All addresses below are EIP-55 checksummed. viem rejects wrong-case
+// addresses with `Address "..." is invalid.` even if the on-chain target
+// is correct, so we cannot just copy from Uniswap docs blindly.
 const UNIVERSAL_ROUTER: Record<number, Address> = {
-  1: "0x4c82d1Fbfe28C977Cbb58D8C7Ff8Fcf9F70A2cca",
+  1: "0x4C82D1fBFe28C977cBB58D8C7FF8FCF9F70a2cCA",
   11155111: "0x3A9D48AB9751398BbFa63ad67599Bb04e4BdF98b",
 };
 
 const V4_QUOTER: Record<number, Address> = {
-  1: "0x52F0E24D1c21C8A0CB1e5a5dD6198556BD9E1203",
-  11155111: "0x61b3f2011a92d183c7dBADBdA940a7555cCf9227",
+  1: "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
+  11155111: "0x61B3f2011A92d183C7dbaDBdA940a7555Ccf9227",
 };
 
 const PERMIT2: Address = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
