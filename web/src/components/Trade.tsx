@@ -175,23 +175,27 @@ export function Trade() {
     hookData: "0x" as Hex,
   }), [poolKey, mode, parsedAmount]);
 
+  const { writeContract, data: txHash, isPending, error } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } =
+    useWaitForTransactionReceipt({ hash: txHash });
+  const txInFlight = isPending || isConfirming;
+
+  // Stop refetching once a tx is in flight so the user does not see a stale
+  // "quote failed" toast pop up while they are watching their tx confirm.
   const quoteRead = useReadContract({
     address: quoter,
     abi: v4QuoterAbi,
     functionName: "quoteExactInputSingle",
     args: [quoteParams],
-    query: { enabled: quoteEnabled, refetchInterval: 12_000 },
+    query: { enabled: quoteEnabled && !txInFlight, refetchInterval: 12_000 },
   });
 
   const quoteOut = (quoteRead.data as readonly [bigint, bigint] | undefined)?.[0];
+  const quoteFailed = quoteEnabled && !txInFlight && !quoteRead.isFetching && !!quoteRead.error;
   const minReceived = useMemo<bigint>(() => {
     if (quoteOut === undefined) return 0n;
     return (quoteOut * BigInt(10_000 - slippageBps)) / 10_000n;
   }, [quoteOut, slippageBps]);
-
-  const { writeContract, data: txHash, isPending, error } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess } =
-    useWaitForTransactionReceipt({ hash: txHash });
 
   function buildV4SwapInput(zeroForOne: boolean, amountIn: bigint, amountOutMin: bigint, currencyIn: Address, currencyOut: Address): Hex {
     const swapParams = encodeAbiParameters(
@@ -235,9 +239,14 @@ export function Trade() {
     );
   }
 
+  // Refuse to send a swap without a quote. A quote can only be undefined if
+  // it has not yet returned, or if it reverted (pool too thin, etc). Either
+  // way we should not fall back to amountOutMinimum = 0; that disables every
+  // form of slippage protection and silently dumps the caller.
   function buy() {
     if (!router) return;
     if (parsedAmount === 0n) return;
+    if (quoteOut === undefined || minReceived === 0n) return;
     const input = buildV4SwapInput(true, parsedAmount, minReceived, "0x0000000000000000000000000000000000000000", PICK_ADDRESS);
     writeContract({
       address: router,
@@ -251,6 +260,7 @@ export function Trade() {
   function sell() {
     if (!router) return;
     if (parsedAmount === 0n) return;
+    if (quoteOut === undefined || minReceived === 0n) return;
     const input = buildV4SwapInput(false, parsedAmount, minReceived, PICK_ADDRESS, "0x0000000000000000000000000000000000000000");
     writeContract({
       address: router,
@@ -354,28 +364,37 @@ export function Trade() {
             quoteOut={quoteOut}
             minReceived={minReceived}
             slippageBps={slippageBps}
-            loading={quoteEnabled && quoteRead.isFetching}
-            failed={quoteEnabled && !!quoteRead.error}
+            loading={quoteEnabled && !txInFlight && quoteRead.isFetching && quoteOut === undefined}
+            failed={quoteFailed}
             hasInput={parsedAmount > 0n}
           />
 
           {mode === "buy" && (
             <button
               onClick={buy}
-              disabled={!isConnected || isPending || isConfirming || quoteOut === undefined}
+              disabled={
+                !isConnected ||
+                txInFlight ||
+                parsedAmount === 0n ||
+                quoteOut === undefined
+              }
               className="btn btn-primary w-full"
             >
               {!isConnected
                 ? "connect wallet to buy"
-                : quoteOut === undefined
-                  ? (parsedAmount > 0n ? "fetching quote…" : "enter an amount")
-                  : isPending
-                    ? "confirm in wallet…"
-                    : isConfirming
-                      ? "swapping…"
-                      : isSuccess
-                        ? "swapped ✓"
-                        : "buy PICK"}
+                : parsedAmount === 0n
+                  ? "enter an amount"
+                  : quoteFailed
+                    ? "quote unavailable — try smaller amount"
+                    : quoteOut === undefined
+                      ? "fetching quote…"
+                      : isPending
+                        ? "confirm in wallet…"
+                        : isConfirming
+                          ? "swapping…"
+                          : isSuccess
+                            ? "swapped ✓"
+                            : "buy PICK"}
             </button>
           )}
 
@@ -389,6 +408,7 @@ export function Trade() {
               permit2ToRouter={permit2ToRouter}
               amount={parsedAmount}
               quoteReady={quoteOut !== undefined}
+              quoteFailed={quoteFailed}
               onApprovePick={approvePickToPermit2}
               onApprovePermit2={approvePermit2ToRouter}
               onSell={sell}
@@ -469,13 +489,14 @@ function SellButtons(props: {
   permit2ToRouter: bigint | undefined;
   amount: bigint;
   quoteReady: boolean;
+  quoteFailed: boolean;
   onApprovePick: () => void;
   onApprovePermit2: () => void;
   onSell: () => void;
 }) {
   const {
     isConnected, isPending, isConfirming, isSuccess,
-    pickToPermit2, permit2ToRouter, amount, quoteReady,
+    pickToPermit2, permit2ToRouter, amount, quoteReady, quoteFailed,
     onApprovePick, onApprovePermit2, onSell,
   } = props;
 
@@ -485,14 +506,17 @@ function SellButtons(props: {
 
   const needsPickApprove = (pickToPermit2 ?? 0n) < amount;
   const needsPermit2Approve = (permit2ToRouter ?? 0n) < amount;
-
   const busyLabel = isPending ? "confirm in wallet…" : isConfirming ? "confirming…" : null;
+
+  if (amount === 0n) {
+    return <button disabled className="btn btn-primary w-full">enter an amount</button>;
+  }
 
   if (needsPickApprove) {
     return (
       <button
         onClick={onApprovePick}
-        disabled={isPending || isConfirming || amount === 0n}
+        disabled={isPending || isConfirming}
         className="btn btn-primary w-full"
       >
         {busyLabel ?? "step 1 of 3: approve PICK to Permit2"}
@@ -504,7 +528,7 @@ function SellButtons(props: {
     return (
       <button
         onClick={onApprovePermit2}
-        disabled={isPending || isConfirming || amount === 0n}
+        disabled={isPending || isConfirming}
         className="btn btn-primary w-full"
       >
         {busyLabel ?? "step 2 of 3: approve Universal Router via Permit2"}
@@ -515,10 +539,17 @@ function SellButtons(props: {
   return (
     <button
       onClick={onSell}
-      disabled={isPending || isConfirming || amount === 0n || !quoteReady}
+      disabled={isPending || isConfirming || !quoteReady}
       className="btn btn-primary w-full"
     >
-      {busyLabel ?? (!quoteReady && amount > 0n ? "fetching quote…" : isSuccess ? "sold ✓" : "sell PICK")}
+      {busyLabel
+        ?? (quoteFailed
+              ? "quote unavailable — try smaller amount"
+              : !quoteReady
+                ? "fetching quote…"
+                : isSuccess
+                  ? "sold ✓"
+                  : "sell PICK")}
     </button>
   );
 }
