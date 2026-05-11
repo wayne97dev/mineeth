@@ -3,12 +3,16 @@
 import { useAccount, useReadContract } from "wagmi";
 import { pickAbi } from "@/lib/pickAbi";
 import { PICK_ADDRESS } from "@/lib/contract";
+import { useMiner } from "@/hooks/useMiner";
 
-// Placeholder until the Rust → WASM miner is wired in. The full integration
-// will hash keccak256(challenge, nonce) on N workers (navigator.hardwareConcurrency)
-// and call mine(nonce) on the first solution that satisfies currentDifficulty.
+function formatRate(hps: number): string {
+  if (hps >= 1_000_000) return `${(hps / 1_000_000).toFixed(2)} MH/s`;
+  if (hps >= 1_000) return `${(hps / 1_000).toFixed(1)} kH/s`;
+  return `${hps.toFixed(0)} H/s`;
+}
+
 export function Miner() {
-  const { address, isConnected } = useAccount();
+  const { isConnected } = useAccount();
 
   const { data: genesis } = useReadContract({
     address: PICK_ADDRESS,
@@ -18,13 +22,18 @@ export function Miner() {
   });
   const complete = (genesis as readonly [bigint, bigint, bigint, boolean] | undefined)?.[3] ?? false;
 
-  const { data: challenge } = useReadContract({
-    address: PICK_ADDRESS,
-    abi: pickAbi,
-    functionName: "getChallenge",
-    args: address ? [address] : undefined,
-    query: { enabled: !!address && complete, refetchInterval: 12_000 },
-  });
+  const {
+    status,
+    hashrate,
+    cores,
+    challenge,
+    error,
+    txHash,
+    start,
+    stop,
+  } = useMiner();
+
+  const running = status === "mining" || status === "submitting" || status === "confirming";
 
   return (
     <div id="mine" className="panel p-6 space-y-4">
@@ -32,8 +41,8 @@ export function Miner() {
         <div className="panel-label">mining</div>
         <p className="mt-2 text-sm" style={{ color: "var(--fg-muted)" }}>
           Each wallet gets its own challenge: solutions are unstealable from
-          the mempool. The miner runs in your browser via WASM workers across
-          all your CPU cores.
+          the mempool. The miner runs in your browser via {cores} WASM
+          worker{cores > 1 ? "s" : ""}.
         </p>
       </div>
 
@@ -56,20 +65,68 @@ export function Miner() {
             <div className="panel-label">your challenge</div>
             <div className="font-mono text-xs mt-1 break-all"
                  style={{ color: "var(--fg-muted)" }}>
-              {challenge as `0x${string}` | undefined ?? "loading…"}
+              {challenge ?? "loading…"}
             </div>
           </div>
 
-          <button disabled className="btn btn-primary w-full">
-            start mining (WASM coming next)
-          </button>
-
-          <div className="text-xs font-mono" style={{ color: "var(--fg-dim)" }}>
-            The Rust → WASM miner ships in the next iteration. For now you can
-            mint genesis above.
+          <div className="grid grid-cols-2 gap-3">
+            <div className="panel p-3" style={{ background: "var(--bg)" }}>
+              <div className="panel-label">hashrate</div>
+              <div className="font-mono text-lg mt-1">
+                {running ? formatRate(hashrate) : "—"}
+              </div>
+            </div>
+            <div className="panel p-3" style={{ background: "var(--bg)" }}>
+              <div className="panel-label">status</div>
+              <div className="font-mono text-lg mt-1" style={{
+                color:
+                  status === "won" ? "var(--ok)" :
+                  status === "error" ? "var(--danger)" :
+                  "var(--fg)"
+              }}>
+                {statusLabel(status)}
+              </div>
+            </div>
           </div>
+
+          {running ? (
+            <button onClick={stop} className="btn w-full">
+              stop mining
+            </button>
+          ) : (
+            <button
+              onClick={start}
+              disabled={!challenge}
+              className="btn btn-primary w-full"
+            >
+              start mining
+            </button>
+          )}
+
+          {txHash && (
+            <div className="text-xs font-mono break-all" style={{ color: "var(--fg-muted)" }}>
+              tx: {txHash}
+            </div>
+          )}
+
+          {error && (
+            <div className="text-xs font-mono" style={{ color: "var(--danger)" }}>
+              {error}
+            </div>
+          )}
         </>
       )}
     </div>
   );
+}
+
+function statusLabel(s: ReturnType<typeof useMiner>["status"]): string {
+  switch (s) {
+    case "idle": return "idle";
+    case "mining": return "mining…";
+    case "submitting": return "submit tx";
+    case "confirming": return "confirming";
+    case "won": return "mined ✓";
+    case "error": return "error";
+  }
 }
