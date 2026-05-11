@@ -14,25 +14,15 @@ import {
   encodePacked,
   parseEther,
   parseUnits,
-  formatEther,
-  formatUnits,
   type Hex,
   type Address,
 } from "viem";
 import { pickAbi } from "@/lib/pickAbi";
 import { PICK_ADDRESS } from "@/lib/contract";
 
-// All addresses below are EIP-55 checksummed. viem rejects wrong-case
-// addresses with `Address "..." is invalid.` even if the on-chain target
-// is correct, so we cannot just copy from Uniswap docs blindly.
 const UNIVERSAL_ROUTER: Record<number, Address> = {
   1: "0x4C82D1fBFe28C977cBB58D8C7FF8FCF9F70a2cCA",
   11155111: "0x3A9D48AB9751398BbFa63ad67599Bb04e4BdF98b",
-};
-
-const V4_QUOTER: Record<number, Address> = {
-  1: "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
-  11155111: "0x61B3f2011A92d183C7dbaDBdA940a7555Ccf9227",
 };
 
 const PERMIT2: Address = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
@@ -41,8 +31,6 @@ const SWAP_EXACT_IN_SINGLE = 0x06;
 const SETTLE_ALL           = 0x0c;
 const TAKE_ALL             = 0x0f;
 const V4_SWAP              = 0x10;
-
-const SLIPPAGE_PRESETS_BPS = [50, 100, 300, 500] as const; // 0.5, 1, 3, 5 %
 
 const universalRouterAbi = [
   {
@@ -55,37 +43,6 @@ const universalRouterAbi = [
       { name: "deadline", type: "uint256" },
     ],
     outputs: [],
-  },
-] as const;
-
-// The V4 Quoter's quoteExactInputSingle is declared nonpayable on-chain but
-// is effectively a read (it catches all reverts internally and returns the
-// computed amount). Calling it via eth_call is the standard pattern.
-const v4QuoterAbi = [
-  {
-    type: "function",
-    name: "quoteExactInputSingle",
-    stateMutability: "view",
-    inputs: [{
-      type: "tuple",
-      name: "params",
-      components: [
-        { type: "tuple", name: "poolKey", components: [
-          { type: "address", name: "currency0" },
-          { type: "address", name: "currency1" },
-          { type: "uint24",  name: "fee" },
-          { type: "int24",   name: "tickSpacing" },
-          { type: "address", name: "hooks" },
-        ]},
-        { type: "bool",    name: "zeroForOne" },
-        { type: "uint128", name: "exactAmount" },
-        { type: "bytes",   name: "hookData" },
-      ],
-    }],
-    outputs: [
-      { name: "amountOut", type: "uint256" },
-      { name: "gasEstimate", type: "uint256" },
-    ],
   },
 ] as const;
 
@@ -125,11 +82,9 @@ export function Trade() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const router = UNIVERSAL_ROUTER[chainId];
-  const quoter = V4_QUOTER[chainId];
 
   const [mode, setMode] = useState<Mode>("buy");
   const [amountStr, setAmountStr] = useState("");
-  const [slippageBps, setSlippageBps] = useState<number>(100); // default 1%
 
   const parsedAmount = useMemo<bigint>(() => {
     try {
@@ -147,7 +102,7 @@ export function Trade() {
   });
   const complete = (genesis as readonly [bigint, bigint, bigint, boolean] | undefined)?.[3] ?? false;
 
-  // Allowance reads only matter for sell mode.
+  // Permit2 allowances are only relevant in sell mode.
   const allow = useReadContracts({
     contracts: address && router
       ? [
@@ -161,7 +116,6 @@ export function Trade() {
   const pickToPermit2 = allow.data?.[0]?.result as bigint | undefined;
   const permit2ToRouter = (allow.data?.[1]?.result as readonly [bigint, number, number] | undefined)?.[0];
 
-  // Live quote from V4 Quoter
   const poolKey = useMemo(() => ({
     currency0: "0x0000000000000000000000000000000000000000" as Address,
     currency1: PICK_ADDRESS,
@@ -170,37 +124,15 @@ export function Trade() {
     hooks: PICK_ADDRESS,
   }), []);
 
-  const quoteEnabled = !!quoter && complete && parsedAmount > 0n;
-  const quoteParams = useMemo(() => ({
-    poolKey,
-    zeroForOne: mode === "buy",
-    exactAmount: parsedAmount,
-    hookData: "0x" as Hex,
-  }), [poolKey, mode, parsedAmount]);
-
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } =
     useWaitForTransactionReceipt({ hash: txHash });
-  const txInFlight = isPending || isConfirming;
 
-  // Stop refetching once a tx is in flight so the user does not see a stale
-  // "quote failed" toast pop up while they are watching their tx confirm.
-  const quoteRead = useReadContract({
-    address: quoter,
-    abi: v4QuoterAbi,
-    functionName: "quoteExactInputSingle",
-    args: [quoteParams],
-    query: { enabled: quoteEnabled && !txInFlight, refetchInterval: 12_000 },
-  });
-
-  const quoteOut = (quoteRead.data as readonly [bigint, bigint] | undefined)?.[0];
-  const quoteFailed = quoteEnabled && !txInFlight && !quoteRead.isFetching && !!quoteRead.error;
-  const minReceived = useMemo<bigint>(() => {
-    if (quoteOut === undefined) return 0n;
-    return (quoteOut * BigInt(10_000 - slippageBps)) / 10_000n;
-  }, [quoteOut, slippageBps]);
-
-  function buildV4SwapInput(zeroForOne: boolean, amountIn: bigint, amountOutMin: bigint, currencyIn: Address, currencyOut: Address): Hex {
+  // amountOutMinimum is set to 0 here. This is fine on Sepolia and for an
+  // initial mainnet launch with small pool depth, but means the caller will
+  // accept any non-zero output. Wire a V4 Quoter and a slippage tolerance
+  // before serious mainnet volume.
+  function buildV4SwapInput(zeroForOne: boolean, amountIn: bigint, currencyIn: Address, currencyOut: Address): Hex {
     const swapParams = encodeAbiParameters(
       [{
         type: "tuple",
@@ -218,7 +150,7 @@ export function Trade() {
           { type: "bytes",   name: "hookData" },
         ],
       }],
-      [{ poolKey, zeroForOne, amountIn, amountOutMinimum: amountOutMin, hookData: "0x" as Hex }]
+      [{ poolKey, zeroForOne, amountIn, amountOutMinimum: 0n, hookData: "0x" as Hex }]
     );
 
     const settleAll = encodeAbiParameters(
@@ -228,7 +160,7 @@ export function Trade() {
 
     const takeAll = encodeAbiParameters(
       [{ type: "address" }, { type: "uint256" }],
-      [currencyOut, amountOutMin]
+      [currencyOut, 0n]
     );
 
     const actions = encodePacked(
@@ -242,15 +174,10 @@ export function Trade() {
     );
   }
 
-  // Refuse to send a swap without a quote. A quote can only be undefined if
-  // it has not yet returned, or if it reverted (pool too thin, etc). Either
-  // way we should not fall back to amountOutMinimum = 0; that disables every
-  // form of slippage protection and silently dumps the caller.
   function buy() {
     if (!router) return;
     if (parsedAmount === 0n) return;
-    if (quoteOut === undefined || minReceived === 0n) return;
-    const input = buildV4SwapInput(true, parsedAmount, minReceived, "0x0000000000000000000000000000000000000000", PICK_ADDRESS);
+    const input = buildV4SwapInput(true, parsedAmount, "0x0000000000000000000000000000000000000000", PICK_ADDRESS);
     writeContract({
       address: router,
       abi: universalRouterAbi,
@@ -263,8 +190,7 @@ export function Trade() {
   function sell() {
     if (!router) return;
     if (parsedAmount === 0n) return;
-    if (quoteOut === undefined || minReceived === 0n) return;
-    const input = buildV4SwapInput(false, parsedAmount, minReceived, PICK_ADDRESS, "0x0000000000000000000000000000000000000000");
+    const input = buildV4SwapInput(false, parsedAmount, PICK_ADDRESS, "0x0000000000000000000000000000000000000000");
     writeContract({
       address: router,
       abi: universalRouterAbi,
@@ -344,61 +270,31 @@ export function Trade() {
               placeholder={mode === "buy" ? "0.001" : "100"}
               inputMode="decimal"
             />
-          </div>
-
-          <div>
-            <label className="panel-label">max slippage</label>
-            <div className="flex gap-1 mt-1">
-              {SLIPPAGE_PRESETS_BPS.map((bps) => (
-                <button
-                  key={bps}
-                  onClick={() => setSlippageBps(bps)}
-                  className={`btn flex-1 ${slippageBps === bps ? "btn-primary" : ""}`}
-                  style={{ padding: "6px 8px", fontSize: "12px" }}
-                >
-                  {(bps / 100).toString()}%
-                </button>
-              ))}
+            <div className="font-mono text-xs mt-1"
+                 style={{ color: "var(--fg-dim)" }}>
+              swap executes at the current AMM rate. start with small amounts
+              while the pool is thin; thin pools have large slippage that you
+              cannot avoid without a quoter.
             </div>
           </div>
-
-          <QuotePreview
-            mode={mode}
-            quoteOut={quoteOut}
-            minReceived={minReceived}
-            slippageBps={slippageBps}
-            loading={quoteEnabled && !txInFlight && quoteRead.isFetching && quoteOut === undefined}
-            failed={quoteFailed}
-            failureReason={quoteRead.error?.message}
-            hasInput={parsedAmount > 0n}
-          />
 
           {mode === "buy" && (
             <button
               onClick={buy}
-              disabled={
-                !isConnected ||
-                txInFlight ||
-                parsedAmount === 0n ||
-                quoteOut === undefined
-              }
+              disabled={!isConnected || isPending || isConfirming || parsedAmount === 0n}
               className="btn btn-primary w-full"
             >
               {!isConnected
                 ? "connect wallet to buy"
                 : parsedAmount === 0n
                   ? "enter an amount"
-                  : quoteFailed
-                    ? "quote unavailable — try smaller amount"
-                    : quoteOut === undefined
-                      ? "fetching quote…"
-                      : isPending
-                        ? "confirm in wallet…"
-                        : isConfirming
-                          ? "swapping…"
-                          : isSuccess
-                            ? "swapped ✓"
-                            : "buy PICK"}
+                  : isPending
+                    ? "confirm in wallet…"
+                    : isConfirming
+                      ? "swapping…"
+                      : isSuccess
+                        ? "swapped ✓"
+                        : "buy PICK"}
             </button>
           )}
 
@@ -411,8 +307,6 @@ export function Trade() {
               pickToPermit2={pickToPermit2}
               permit2ToRouter={permit2ToRouter}
               amount={parsedAmount}
-              quoteReady={quoteOut !== undefined}
-              quoteFailed={quoteFailed}
               onApprovePick={approvePickToPermit2}
               onApprovePermit2={approvePermit2ToRouter}
               onSell={sell}
@@ -430,66 +324,6 @@ export function Trade() {
   );
 }
 
-function QuotePreview(props: {
-  mode: Mode;
-  quoteOut: bigint | undefined;
-  minReceived: bigint;
-  slippageBps: number;
-  loading: boolean;
-  failed: boolean;
-  failureReason?: string;
-  hasInput: boolean;
-}) {
-  const { mode, quoteOut, minReceived, slippageBps, loading, failed, failureReason, hasInput } = props;
-  const outLabel = mode === "buy" ? "PICK" : "ETH";
-  const outDecimals = 18;
-
-  let body: React.ReactNode;
-  if (!hasInput) {
-    body = (
-      <span style={{ color: "var(--fg-dim)" }}>quote appears once you enter an amount</span>
-    );
-  } else if (failed) {
-    body = (
-      <div style={{ color: "var(--danger)" }}>
-        <div>quote failed — pool may be too thin or not yet seeded</div>
-        {failureReason && (
-          <div className="mt-1 break-all" style={{ color: "var(--fg-dim)", fontSize: "10px" }}>
-            {failureReason.split("\n")[0].slice(0, 200)}
-          </div>
-        )}
-      </div>
-    );
-  } else if (loading || quoteOut === undefined) {
-    body = <span style={{ color: "var(--fg-muted)" }}>fetching quote…</span>;
-  } else {
-    const expected = mode === "buy"
-      ? formatUnits(quoteOut, outDecimals)
-      : formatEther(quoteOut);
-    const min = mode === "buy"
-      ? formatUnits(minReceived, outDecimals)
-      : formatEther(minReceived);
-    body = (
-      <>
-        <div className="flex justify-between">
-          <span style={{ color: "var(--fg-muted)" }}>expected</span>
-          <span style={{ color: "var(--fg)" }}>{Number(expected).toFixed(6)} {outLabel}</span>
-        </div>
-        <div className="flex justify-between">
-          <span style={{ color: "var(--fg-muted)" }}>min received ({(slippageBps / 100).toString()}%)</span>
-          <span style={{ color: "var(--accent)" }}>{Number(min).toFixed(6)} {outLabel}</span>
-        </div>
-      </>
-    );
-  }
-
-  return (
-    <div className="panel p-3 space-y-1 font-mono text-xs" style={{ background: "var(--bg)" }}>
-      {body}
-    </div>
-  );
-}
-
 function SellButtons(props: {
   isConnected: boolean;
   isPending: boolean;
@@ -498,15 +332,13 @@ function SellButtons(props: {
   pickToPermit2: bigint | undefined;
   permit2ToRouter: bigint | undefined;
   amount: bigint;
-  quoteReady: boolean;
-  quoteFailed: boolean;
   onApprovePick: () => void;
   onApprovePermit2: () => void;
   onSell: () => void;
 }) {
   const {
     isConnected, isPending, isConfirming, isSuccess,
-    pickToPermit2, permit2ToRouter, amount, quoteReady, quoteFailed,
+    pickToPermit2, permit2ToRouter, amount,
     onApprovePick, onApprovePermit2, onSell,
   } = props;
 
@@ -514,13 +346,13 @@ function SellButtons(props: {
     return <button disabled className="btn btn-primary w-full">connect wallet to sell</button>;
   }
 
-  const needsPickApprove = (pickToPermit2 ?? 0n) < amount;
-  const needsPermit2Approve = (permit2ToRouter ?? 0n) < amount;
-  const busyLabel = isPending ? "confirm in wallet…" : isConfirming ? "confirming…" : null;
-
   if (amount === 0n) {
     return <button disabled className="btn btn-primary w-full">enter an amount</button>;
   }
+
+  const needsPickApprove = (pickToPermit2 ?? 0n) < amount;
+  const needsPermit2Approve = (permit2ToRouter ?? 0n) < amount;
+  const busyLabel = isPending ? "confirm in wallet…" : isConfirming ? "confirming…" : null;
 
   if (needsPickApprove) {
     return (
@@ -549,17 +381,10 @@ function SellButtons(props: {
   return (
     <button
       onClick={onSell}
-      disabled={isPending || isConfirming || !quoteReady}
+      disabled={isPending || isConfirming}
       className="btn btn-primary w-full"
     >
-      {busyLabel
-        ?? (quoteFailed
-              ? "quote unavailable — try smaller amount"
-              : !quoteReady
-                ? "fetching quote…"
-                : isSuccess
-                  ? "sold ✓"
-                  : "sell PICK")}
+      {busyLabel ?? (isSuccess ? "sold ✓" : "sell PICK")}
     </button>
   );
 }
