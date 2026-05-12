@@ -49,13 +49,22 @@ const daemonAbi = parseAbi([
 ]);
 
 // ───────── Tier definitions (mirror MinerAgent._tier) ─────────
-type Tier = { name: string; image: string; color: string };
+type Tier = {
+  name: string;
+  image: string;
+  /** Hex color with leading "#", used for OpenSea trait swatch */
+  color: string;
+  /** Same color WITHOUT leading "#", OpenSea spec for background_color */
+  bg: string;
+  /** Minimum DMN held to qualify for this tier */
+  minDmn: number;
+};
 
 const TIERS = {
-  gold:    { name: "Gold",     image: "/nft/gold.png",     color: "#f4c430" },
-  silver:  { name: "Silver",   image: "/nft/silver.png",   color: "#c0c0c8" },
-  bronze:  { name: "Bronze",   image: "/nft/bronze.png",   color: "#cd7f32" },
-  initiate:{ name: "Initiate", image: "/nft/initiate.png", color: "#7a7a82" },
+  gold:    { name: "Gold",     image: "/nft/gold.png",     color: "#f4c430", bg: "0e0a02", minDmn: 100_000 },
+  silver:  { name: "Silver",   image: "/nft/silver.png",   color: "#c0c0c8", bg: "0c0c10", minDmn:  10_000 },
+  bronze:  { name: "Bronze",   image: "/nft/bronze.png",   color: "#cd7f32", bg: "0e0801", minDmn:   1_000 },
+  initiate:{ name: "Initiate", image: "/nft/initiate.png", color: "#7a7a82", bg: "08080a", minDmn:       0 },
 } as const satisfies Record<string, Tier>;
 
 function tierFor(balance: bigint): Tier {
@@ -118,13 +127,31 @@ export async function GET(
   const metadata = {
     name: `Daemon Miner Agent #${tokenId}`,
     description:
-      "ERC-8004 aligned identity for a DMN participant. Soulbound; the tier badge reflects live DMN holdings of the agent wallet, so the NFT visually upgrades as you accumulate.",
+      "ERC-8004 aligned identity for a DMN participant. Soulbound; the " +
+      "tier badge reflects live DMN holdings of the agent wallet, so the " +
+      "NFT visually upgrades as you accumulate. Minimum 1 DMN held to " +
+      "claim; transfers are blocked at the contract level.",
     image: `${origin}${tier.image}`,
-    external_url: "https://github.com/wayne97dev/mineeth",
+    // 6-char hex without "#" — OpenSea uses this as the card backdrop.
+    background_color: tier.bg,
+    // Per-token external link points at the holder's profile on Etherscan
+    // (more useful than a generic site link for someone inspecting the NFT).
+    external_url: `https://etherscan.io/address/${owner}`,
     attributes: [
       { trait_type: "Tier", value: tier.name },
-      { trait_type: "DMN Held", display_type: "number", value: dmnHeld },
+      {
+        trait_type: "DMN Held",
+        display_type: "number",
+        value: dmnHeld,
+      },
+      {
+        trait_type: "Tier Floor",
+        display_type: "number",
+        value: tier.minDmn,
+      },
       { trait_type: "Agent Wallet", value: owner },
+      // Pure surface trait so OpenSea filters group by tier color visually.
+      { trait_type: "Tier Color", value: tier.color },
     ],
   };
 
