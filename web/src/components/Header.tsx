@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { ConnectWallet } from "./ConnectWallet";
 
 export function Header() {
@@ -8,6 +9,14 @@ export function Header() {
       <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-10">
           <a href="/" className="app-logo">
+            <Image
+              src="/logo.png"
+              alt="Daemon"
+              width={32}
+              height={32}
+              priority
+              className="app-logo-mark"
+            />
             <span className="app-logo-text">DAEMON</span>
           </a>
           <nav className="hidden sm:flex gap-7">
