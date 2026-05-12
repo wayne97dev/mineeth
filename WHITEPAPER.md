@@ -184,6 +184,28 @@ Second, read the constants directly from chain. Call `TOTAL_SUPPLY`, `MINING_SUP
 
 Third, try to remove liquidity from the PICK/ETH pool through any V4 router or position manager. The call reverts with `InvalidAction()`. The revert is unconditional and originates from the hook itself, not from any access-controlled flag.
 
+## Agent alignment
+
+The PICK contract maps cleanly onto the ERC-8004 agent registry model. Three properties of a "trustless agent" are spelled out in the EIP: a stable identity, observable reputation, and verifiable behavior. PICK satisfies all three without any wrapper layer.
+
+The identity is the contract's own address. It is fixed at deploy time, derived deterministically from the CREATE2 init-code hash, and cannot be migrated. There is no upgradable proxy in front, no admin key to rotate, no governance to change ownership. The address is the agent.
+
+The reputation is the contract's on-chain state. `totalMints`, `totalMiningMinted`, accumulated swap fees, the V4 LP NFT held by the controller, the genesis ETH raised: every metric that matters is queryable directly from chain by any indexer. There is no reputation oracle to trust because every claim PICK makes about itself can be checked against its own storage.
+
+The behavior is verified by the source. The bytecode is the source, the source is the spec, and both are immutable. The hook reverts on liquidity removal. The mint function refuses to pay more than `MINING_SUPPLY`. The `claimFees` function only moves ETH the contract has accumulated, never tokens it has minted. Each of these guarantees is unconditional and originates from the hook itself.
+
+When the canonical ERC-8004 Identity Registry is deployed on mainnet (`0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`), the controller registers PICK with a single call to `register(agentURI)`. The `agentURI` points to a hosted JSON file (`/agent.json`) that lists the contract's capabilities, endpoints, and validation hooks. Indexers like 8004scan pick the new agent up automatically from the `Transfer` event of the registry NFT.
+
+## Miner Agent NFTs
+
+A separate ERC-721 collection, `MinerAgent`, gives each PICK participant an on-chain identity in the ERC-8004 sense without modifying the core contract. The mapping is one NFT per address, claimable once, soulbound after mint. Anyone whose PICK balance is non-zero may call `claim()` to mint their own agent NFT. Genesis buyers, miners, and aftermarket buyers all qualify; the only requirement is that the wallet currently holds PICK.
+
+The metadata is generated entirely on-chain. `tokenURI` returns a base64-encoded JSON whose `image` field embeds a base64-encoded SVG rendered from live state. The SVG shows the agent ID, the truncated wallet address, the current PICK balance, and a tier label that scales with holdings: Initiate, Bronze, Silver, or Gold. There are no hosted images, no IPFS pins, and no central server in the loop. Every render is reproducible from the contract.
+
+Transfers between EOAs revert with `Soulbound()`. Burning and minting are both allowed at the protocol level so that future upgrades to the soulbound semantics are possible without a redeploy, but no burn function is exposed to users today. The NFT is meant to remain attached to the wallet that earned it.
+
+The collection is intentionally lightweight. It does not give holders new rights over PICK. It does not change the supply distribution. It does not introduce new tradeable surface area. Its job is to make ownership of PICK legible to agent-aware tooling and to give participants a single, queryable identity that ERC-8004 indexers can resolve.
+
 ## Limits and caveats
 
 The contract has no upgrade path. If a critical bug is discovered post-launch, there is no fix. The mitigation is the same as Bitcoin's: keep the surface small, audit before deploy, deploy code that has been forked from a contract running in production elsewhere.
