@@ -7,6 +7,7 @@ import { RecentMints } from "@/components/RecentMints";
 import { Genesis } from "@/components/Genesis";
 import { Miner } from "@/components/Miner";
 import { Trade } from "@/components/Trade";
+import { MinerAgent } from "@/components/MinerAgent";
 
 export default function Page() {
   return (
@@ -43,6 +44,8 @@ export default function Page() {
         </div>
 
         <Trade />
+
+        <MinerAgent />
 
         <footer className="pt-8 border-t font-mono text-xs space-y-1"
                 style={{ borderColor: "var(--border)", color: "var(--fg-muted)" }}>
