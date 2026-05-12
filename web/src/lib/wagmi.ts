@@ -10,12 +10,14 @@ const projectId = process.env.NEXT_PUBLIC_WC_PROJECT_ID ?? "PLACEHOLDER";
 const rpcMainnet = process.env.NEXT_PUBLIC_MAINNET_RPC;
 const rpcSepolia = process.env.NEXT_PUBLIC_SEPOLIA_RPC;
 
-// Default to llamarpc when NEXT_PUBLIC_MAINNET_RPC isn't set (Netlify env
-// vars haven't been wired up yet during the trial). viem's bare http() falls
-// back to Cloudflare's endpoint which rate-limits multi-call read batches
-// aggressively and causes the Stats component to render "Contract not
-// reachable" even when the wallet is on the right chain.
-const DEFAULT_MAINNET_RPC = "https://eth.llamarpc.com";
+// Default to PublicNode when NEXT_PUBLIC_MAINNET_RPC isn't set (Netlify env
+// vars haven't been wired up yet during the trial). viem's bare http()
+// falls back to Cloudflare's endpoint which rate-limits multi-call read
+// batches aggressively. We tried llamarpc here originally but it returned
+// 503 mid-trial — PublicNode has been consistently reachable and the
+// canonical multicall3 contract responds through it, which is what
+// useReadContracts depends on.
+const DEFAULT_MAINNET_RPC = "https://ethereum-rpc.publicnode.com";
 const DEFAULT_SEPOLIA_RPC = "https://ethereum-sepolia-rpc.publicnode.com";
 
 export const config = getDefaultConfig({
