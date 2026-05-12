@@ -1,6 +1,6 @@
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { mainnet, sepolia } from "wagmi/chains";
-import { fallback, http } from "viem";
+import { http } from "viem";
 
 // Get a free project id at https://cloud.reown.com (formerly WalletConnect Cloud).
 // Until you set NEXT_PUBLIC_WC_PROJECT_ID, WalletConnect-based wallets (Rainbow,
@@ -10,21 +10,13 @@ const projectId = process.env.NEXT_PUBLIC_WC_PROJECT_ID ?? "PLACEHOLDER";
 const rpcMainnet = process.env.NEXT_PUBLIC_MAINNET_RPC;
 const rpcSepolia = process.env.NEXT_PUBLIC_SEPOLIA_RPC;
 
-// Fallback chain of public RPCs: tries them in order, switches on failure.
-// Keeps the site working even when NEXT_PUBLIC_MAINNET_RPC isn't set on
-// Netlify (the case during the trial) — the default viem http() relies on
-// Cloudflare's endpoint which rate-limits multi-call batches aggressively.
-const MAINNET_PUBLIC_RPCS = [
-  "https://eth.llamarpc.com",
-  "https://rpc.ankr.com/eth",
-  "https://ethereum-rpc.publicnode.com",
-  "https://cloudflare-eth.com",
-];
-
-const SEPOLIA_PUBLIC_RPCS = [
-  "https://ethereum-sepolia-rpc.publicnode.com",
-  "https://rpc.sepolia.org",
-];
+// Default to llamarpc when NEXT_PUBLIC_MAINNET_RPC isn't set (Netlify env
+// vars haven't been wired up yet during the trial). viem's bare http() falls
+// back to Cloudflare's endpoint which rate-limits multi-call read batches
+// aggressively and causes the Stats component to render "Contract not
+// reachable" even when the wallet is on the right chain.
+const DEFAULT_MAINNET_RPC = "https://eth.llamarpc.com";
+const DEFAULT_SEPOLIA_RPC = "https://ethereum-sepolia-rpc.publicnode.com";
 
 export const config = getDefaultConfig({
   appName: "Daemon",
@@ -32,16 +24,8 @@ export const config = getDefaultConfig({
   // Mainnet first so RainbowKit defaults to it (trial contract lives there).
   chains: [mainnet, sepolia],
   transports: {
-    [mainnet.id]: fallback(
-      (rpcMainnet ? [http(rpcMainnet)] : []).concat(
-        MAINNET_PUBLIC_RPCS.map((u) => http(u))
-      )
-    ),
-    [sepolia.id]: fallback(
-      (rpcSepolia ? [http(rpcSepolia)] : []).concat(
-        SEPOLIA_PUBLIC_RPCS.map((u) => http(u))
-      )
-    ),
+    [mainnet.id]: http(rpcMainnet ?? DEFAULT_MAINNET_RPC),
+    [sepolia.id]: http(rpcSepolia ?? DEFAULT_SEPOLIA_RPC),
   },
   ssr: true,
 });
