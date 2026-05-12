@@ -217,13 +217,3 @@ Address-binding makes solutions unstealable from the mempool but does nothing ag
 The 1% swap fee paid to the controller represents an ongoing extraction from swap volume. It is not a token tax. The swap itself executes at the pool's posted price, and the fee is taken from the ETH side via the hook. Buyers and sellers pay equally. The fee can never be raised, lowered, or rerouted because the contract is immutable.
 
 DMN is not a promise. There is no team behind it in the conventional sense. There is no roadmap to deliver against. The contract does what its bytecode does, and nothing more.
-
-## References
-
-The design draws directly from the `Hash` contract at `0xAC7b5d06fa1e77D08aea40d46cB7C5923A87A0cc` on Ethereum mainnet (MIT license), itself an evolution of the 0xBitcoin model from 2018 and the broader proof-of-work-token literature. The Uniswap V4 hook architecture is documented at https://docs.uniswap.org/contracts/v4. The deterministic CREATE2 deployer at `0x4e59b44847b379578588920cA78FbF26c0B4956C` is the Arachnid factory, available at the same address on every major EVM chain.
-
-## Status
-
-Sepolia testnet deployment: `0xf8bcf8AE88B2fd5a67d74a6eeb6c4b5A366AE0Cc`, verified on Sepolia Etherscan, used to validate the contract's full lifecycle end-to-end including the refund escape hatch.
-
-Mainnet deployment: not yet performed at the time of this writing. The mainnet address will be a different value because the V4 mainnet constructor arguments differ from Sepolia and therefore yield a different CREATE2 init-code hash, salt, and final address.
