@@ -2,9 +2,9 @@
 pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
-import {MinerAgent, IPick} from "../src/MinerAgent.sol";
+import {MinerAgent, IDaemon} from "../src/MinerAgent.sol";
 
-contract MockPick is IPick {
+contract MockDaemon is IDaemon {
     mapping(address => uint256) public override balanceOf;
     uint256 public override totalMints;
     uint256 public override totalMiningMinted;
@@ -14,19 +14,19 @@ contract MockPick is IPick {
 
 contract MinerAgentTest is Test {
     MinerAgent internal agent;
-    MockPick   internal pick;
+    MockDaemon   internal daemon;
 
     address internal alice  = address(0xAAAA);
     address internal bob    = address(0xBBBB);
     address internal carol  = address(0xCCCC);
 
     function setUp() public {
-        pick = new MockPick();
-        agent = new MinerAgent(IPick(address(pick)));
+        daemon = new MockDaemon();
+        agent = new MinerAgent(IDaemon(address(daemon)));
     }
 
     function test_claim_basicHappyPath() public {
-        pick.setBalance(alice, 500e18);
+        daemon.setBalance(alice, 500e18);
         vm.prank(alice);
         uint256 tokenId = agent.claim();
 
@@ -36,14 +36,14 @@ contract MinerAgentTest is Test {
         assertEq(agent.totalAgents(), 1);
     }
 
-    function test_claim_revertsIfNoPick() public {
+    function test_claim_revertsIfNoDaemon() public {
         vm.prank(alice);
         vm.expectRevert(MinerAgent.NotEligible.selector);
         agent.claim();
     }
 
     function test_claim_revertsOnDoubleClaim() public {
-        pick.setBalance(alice, 1_000e18);
+        daemon.setBalance(alice, 1_000e18);
         vm.prank(alice);
         agent.claim();
         vm.prank(alice);
@@ -52,9 +52,9 @@ contract MinerAgentTest is Test {
     }
 
     function test_claim_multipleHoldersIncrementalIds() public {
-        pick.setBalance(alice, 100e18);
-        pick.setBalance(bob,   100e18);
-        pick.setBalance(carol, 100e18);
+        daemon.setBalance(alice, 100e18);
+        daemon.setBalance(bob,   100e18);
+        daemon.setBalance(carol, 100e18);
 
         vm.prank(alice); uint256 a = agent.claim();
         vm.prank(bob);   uint256 b = agent.claim();
@@ -65,7 +65,7 @@ contract MinerAgentTest is Test {
     }
 
     function test_soulbound_transferReverts() public {
-        pick.setBalance(alice, 100e18);
+        daemon.setBalance(alice, 100e18);
         vm.prank(alice);
         uint256 id = agent.claim();
 
@@ -75,7 +75,7 @@ contract MinerAgentTest is Test {
     }
 
     function test_soulbound_safeTransferReverts() public {
-        pick.setBalance(alice, 100e18);
+        daemon.setBalance(alice, 100e18);
         vm.prank(alice);
         uint256 id = agent.claim();
 
@@ -85,7 +85,7 @@ contract MinerAgentTest is Test {
     }
 
     function test_tokenURI_returnsDataUri() public {
-        pick.setBalance(alice, 12_345e18);
+        daemon.setBalance(alice, 12_345e18);
         vm.prank(alice);
         uint256 id = agent.claim();
         string memory uri = agent.tokenURI(id);
@@ -106,9 +106,9 @@ contract MinerAgentTest is Test {
 
     function test_tier_thresholds() public {
         // Tier boundaries: Initiate < 100 ≤ Bronze < 1_000 ≤ Silver < 10_000 ≤ Gold
-        pick.setBalance(alice, 99e18);     // Initiate
-        pick.setBalance(bob,   100e18);    // Bronze
-        pick.setBalance(carol, 1_000e18);  // Silver
+        daemon.setBalance(alice, 99e18);     // Initiate
+        daemon.setBalance(bob,   100e18);    // Bronze
+        daemon.setBalance(carol, 1_000e18);  // Silver
 
         vm.prank(alice); agent.claim();
         vm.prank(bob);   agent.claim();
@@ -126,8 +126,8 @@ contract MinerAgentTest is Test {
     }
 
     function test_name_and_symbol() public view {
-        assertEq(agent.name(), "PICK Miner Agent");
-        assertEq(agent.symbol(), "PMA");
+        assertEq(agent.name(), "Daemon Miner Agent");
+        assertEq(agent.symbol(), "DMA");
     }
 
     // ───────── URI swap mechanism ─────────
@@ -149,7 +149,7 @@ contract MinerAgentTest is Test {
     }
 
     function test_setExternalBaseURI_changesTokenURI() public {
-        pick.setBalance(alice, 100e18);
+        daemon.setBalance(alice, 100e18);
         vm.prank(alice);
         agent.claim();
 
@@ -160,7 +160,7 @@ contract MinerAgentTest is Test {
     }
 
     function test_setExternalBaseURI_emptyResetsToOnChain() public {
-        pick.setBalance(alice, 100e18);
+        daemon.setBalance(alice, 100e18);
         vm.prank(alice);
         agent.claim();
 

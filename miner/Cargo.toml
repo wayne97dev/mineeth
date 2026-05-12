@@ -1,8 +1,8 @@
 [package]
-name = "pick-miner"
+name = "daemon-miner"
 version = "0.1.0"
 edition = "2021"
-description = "Browser-side keccak256 PoW miner for the PICK ERC-20 contract"
+description = "Browser-side keccak256 PoW miner for the DMN ERC-20 contract"
 license = "MIT"
 
 [lib]

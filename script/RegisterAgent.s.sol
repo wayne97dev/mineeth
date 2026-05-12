@@ -10,9 +10,9 @@ interface IIdentityRegistry {
     function ownerOf(uint256 tokenId) external view returns (address);
 }
 
-/// @notice Registers PICK as an ERC-8004 agent on the Ethereum mainnet
+/// @notice Registers DMN as an ERC-8004 agent on the Ethereum mainnet
 ///         Identity Registry (0x8004A169FB4a3325136EB29fA0ceB6D2e539a432).
-///         Run AFTER the Pick mainnet deploy and after agent.json is live
+///         Run AFTER the Daemon mainnet deploy and after agent.json is live
 ///         at the custom domain.
 ///
 /// Required env:
@@ -20,9 +20,9 @@ interface IIdentityRegistry {
 ///   (and PRIVATE_KEY or --account, the wallet that becomes the agent NFT owner)
 ///
 /// Example:
-///   AGENT_URI=https://pick-eth.com/agent.json \
+///   AGENT_URI=https://daemon-eth.com/agent.json \
 ///   forge script script/RegisterAgent.s.sol \
-///     --rpc-url $MAINNET_RPC --account pick-mainnet --broadcast
+///     --rpc-url $MAINNET_RPC --account daemon-mainnet --broadcast
 contract RegisterAgent is Script {
     address constant IDENTITY_REGISTRY_MAINNET = 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432;
     address constant IDENTITY_REGISTRY_SEPOLIA = 0x8004A818BFB912233c491871b3d84c89A494BD9e;

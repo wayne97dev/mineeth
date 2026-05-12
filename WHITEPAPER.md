@@ -1,4 +1,4 @@
-# PICK
+# Daemon
 
 A Mined ERC-20 with a Self-Hook
 
@@ -6,9 +6,9 @@ May 2026
 
 ## Abstract
 
-PICK is an ERC-20 token released entirely through proof of work, with no team allocation, no insider presale, no admin keys, and no upgrade path. The token contract is also its own Uniswap V4 swap hook and its own miner. One bytecode, one address. Once deployed, the rules cannot change.
+DMN is an ERC-20 token released entirely through proof of work, with no team allocation, no insider presale, no admin keys, and no upgrade path. The token contract is also its own Uniswap V4 swap hook and its own miner. One bytecode, one address. Once deployed, the rules cannot change.
 
-The supply is 21 million tokens, identical to Bitcoin in scale. Five percent funds an open genesis sale, five percent seeds a Uniswap V4 PICK/ETH pool whose liquidity is locked forever by the same hook that collects a 1% swap fee. The remaining ninety percent is mined: anyone with a browser can solve a keccak256 puzzle bound to their wallet address and call `mine()` to receive the current era's reward.
+The supply is 21 million tokens, identical to Bitcoin in scale. Five percent funds an open genesis sale, five percent seeds a Uniswap V4 DMN/ETH pool whose liquidity is locked forever by the same hook that collects a 1% swap fee. The remaining ninety percent is mined: anyone with a browser can solve a keccak256 puzzle bound to their wallet address and call `mine()` to receive the current era's reward.
 
 This document describes why the design exists, how each piece works, and what limits remain.
 
@@ -18,7 +18,7 @@ Most ERC-20 launches today are pre-mints. A team deploys a contract, mints the s
 
 A different model has existed since 0xBitcoin in 2018: the contract refuses to mint to anyone. New tokens emerge only when someone solves a hash puzzle on chain. The supply schedule is mechanical, the distribution is permissionless, and the team has no special power because there is no team-controlled state to abuse.
 
-PICK takes that model and adds two pieces that 0xBitcoin and its imitators could not have. The first is address-bound proofs of work: a mined nonce only works for the wallet that found it, so solutions cannot be copied from the mempool. The second is a self-hook, made possible by Uniswap V4 hooks shipping to mainnet in January 2025. The token contract is also the swap hook for its own liquidity pool, which lets the pool reject every liquidity-modification call and effectively lock the LP without any external service.
+DMN takes that model and adds two pieces that 0xBitcoin and its imitators could not have. The first is address-bound proofs of work: a mined nonce only works for the wallet that found it, so solutions cannot be copied from the mempool. The second is a self-hook, made possible by Uniswap V4 hooks shipping to mainnet in January 2025. The token contract is also the swap hook for its own liquidity pool, which lets the pool reject every liquidity-modification call and effectively lock the LP without any external service.
 
 Address-binding kills front-running at the cryptographic level. The self-hook removes the need to trust a third-party lock contract or a multisig timeout. Together they remove the two most common forms of soft-rug that survive even in supposedly fair launches.
 
@@ -28,11 +28,11 @@ The contract moves through four phases in its lifetime.
 
 **Phase 0, Empty.** The contract is deployed and holds nothing. Constructor parameters set the addresses of the Uniswap V4 PoolManager, PositionManager, and Permit2 for the target chain. The deployer becomes the `controller`, the only address with permission to claim accumulated swap fees later. No other state is mutable from outside.
 
-**Phase 1, Genesis.** Anyone can call `mintGenesis(units)` with `units * 0.01 ETH`. Each unit yields 1,000 PICK, capped at five units per transaction. The transaction cap exists so a single mempool slot cannot sweep the entire allocation in one go. Excess ETH is refunded in the same call. Three days after deploy, if the pool has not been seeded, `refundGenesis` opens and lets any holder of genesis PICK redeem it back for ETH at the original price (see Refund escape hatch).
+**Phase 1, Genesis.** Anyone can call `mintGenesis(units)` with `units * 0.01 ETH`. Each unit yields 1,000 DMN, capped at five units per transaction. The transaction cap exists so a single mempool slot cannot sweep the entire allocation in one go. Excess ETH is refunded in the same call. Three days after deploy, if the pool has not been seeded, `refundGenesis` opens and lets any holder of genesis DMN redeem it back for ETH at the original price (see Refund escape hatch).
 
-**Phase 2, Seeding.** Once the genesis cap of 1,050,000 PICK is sold out, anyone can call `seedPool()`. The function mints the remaining 19,950,000 PICK to the contract itself, creates the V4 PICK/ETH pool with the contract as its hook, deposits all genesis ETH plus 1,050,000 PICK as liquidity, and sets the initial mining difficulty. The LP position NFT is minted to the controller. A fallback `partialSeed()` exists for the case where genesis stalls below the cap; it can be called by the controller no earlier than thirty minutes after deploy.
+**Phase 2, Seeding.** Once the genesis cap of 1,050,000 DMN is sold out, anyone can call `seedPool()`. The function mints the remaining 19,950,000 DMN to the contract itself, creates the V4 DMN/ETH pool with the contract as its hook, deposits all genesis ETH plus 1,050,000 DMN as liquidity, and sets the initial mining difficulty. The LP position NFT is minted to the controller. A fallback `partialSeed()` exists for the case where genesis stalls below the cap; it can be called by the controller no earlier than thirty minutes after deploy.
 
-**Phase 3, Mining.** The remaining 18,900,000 PICK is released through proof of work. Each successful `mine(nonce)` call pays the current era's reward, starting at 100 PICK and halving every 100,000 mints. Mining ends when the cap is reached.
+**Phase 3, Mining.** The remaining 18,900,000 DMN is released through proof of work. Each successful `mine(nonce)` call pays the current era's reward, starting at 100 DMN and halving every 100,000 mints. Mining ends when the cap is reached.
 
 Phase transitions are gated by storage flags. No admin function exists to skip a phase, rewind state, or change parameters.
 
@@ -69,7 +69,7 @@ Starting difficulty after seeding is `type(uint256).max >> 32`, which means roug
 
 A Uniswap V4 hook is a contract whose address contains specific bits in its lower fourteen bits. Those bits encode which lifecycle functions the hook actually implements. The same contract that implements `transfer` and `balanceOf` for the ERC-20 also implements `beforeSwap`, `afterSwap`, and `beforeInitialize` for the pool. To make this work, the contract is deployed via CREATE2 with a salt chosen so the resulting address has the correct permission bits. Salt mining happens offline before deployment, typically takes a few seconds, and is fully reproducible.
 
-After seeding, the pool exists at coordinates: currency0 is native ETH, currency1 is PICK, tickSpacing is 200, hooks is the PICK contract itself. The hook intercepts swaps and routes 1% of the ETH side of every swap to the contract's own balance.
+After seeding, the pool exists at coordinates: currency0 is native ETH, currency1 is DMN, tickSpacing is 200, hooks is the DMN contract itself. The hook intercepts swaps and routes 1% of the ETH side of every swap to the contract's own balance.
 
 The hook also denies every liquidity modification. `beforeAddLiquidity` and `beforeRemoveLiquidity` revert unconditionally. The pool starts with the seed liquidity and stays at that exact shape forever. Nobody, including the deployer who holds the LP NFT, can move the liquidity out or add more on top of it.
 
@@ -81,14 +81,14 @@ The launch model that results does not depend on a third-party lock service, a m
 
 | Allocation | Amount | Share |
 |---|---|---|
-| Genesis sale | 1,050,000 PICK | 5% |
-| Locked LP | 1,050,000 PICK | 5% |
-| Mining | 18,900,000 PICK | 90% |
-| **Total** | **21,000,000 PICK** | **100%** |
+| Genesis sale | 1,050,000 DMN | 5% |
+| Locked LP | 1,050,000 DMN | 5% |
+| Mining | 18,900,000 DMN | 90% |
+| **Total** | **21,000,000 DMN** | **100%** |
 
-Genesis is priced at 0.01 ETH per 1,000 PICK, fixed. A fully subscribed genesis raises 10.5 ETH, every unit of which goes directly into the V4 pool as the ETH side of seed liquidity. Nothing reaches the deployer at genesis.
+Genesis is priced at 0.01 ETH per 1,000 DMN, fixed. A fully subscribed genesis raises 10.5 ETH, every unit of which goes directly into the V4 pool as the ETH side of seed liquidity. Nothing reaches the deployer at genesis.
 
-The mining schedule halves every 100,000 successful mints. Era zero pays 100 PICK per mint, era one pays 50, era two pays 25, and so on. In practice the schedule terminates at era four because the cumulative reward up to that point reaches the 18.9M mining cap.
+The mining schedule halves every 100,000 successful mints. Era zero pays 100 DMN per mint, era one pays 50, era two pays 25, and so on. In practice the schedule terminates at era four because the cumulative reward up to that point reaches the 18.9M mining cap.
 
 Target throughput is one mint per minute on average. With Ethereum's twelve-second blocks, that translates to a difficulty retarget every 33.6 hours of real time, assuming the network mines at exactly the target rate. The retarget mechanism corrects for deviations within a factor of four per period.
 
@@ -101,7 +101,7 @@ seedPool()    — permissionless, requires genesisMinted == GENESIS_CAP
 partialSeed() — controller only, requires block.timestamp >= deployedAt + 30 minutes
 ```
 
-Both functions call the same internal logic. The only difference is whether the genesis has reached the full 1,050,000 PICK cap or not. `seedPool` is the happy path where the community fills the cap on its own; `partialSeed` is the controller's escape hatch when genesis stalls.
+Both functions call the same internal logic. The only difference is whether the genesis has reached the full 1,050,000 DMN cap or not. `seedPool` is the happy path where the community fills the cap on its own; `partialSeed` is the controller's escape hatch when genesis stalls.
 
 The interesting property of `partialSeed` is what it does with the unsold genesis allocation. The body uses `genesisMinted`, not `GENESIS_CAP`:
 
@@ -114,11 +114,11 @@ function _seedBody() internal {
 }
 ```
 
-The unsold genesis PICK is never minted. Not burned, not held by the controller, not stuck in storage. It simply does not exist. If genesis stops at 300,000 PICK sold, the contract's total supply becomes 300,000 plus 18,900,000 = 19,200,000 PICK, and the pool receives 300,000 PICK paired against whatever ETH was raised at that point.
+The unsold genesis DMN is never minted. Not burned, not held by the controller, not stuck in storage. It simply does not exist. If genesis stops at 300,000 DMN sold, the contract's total supply becomes 300,000 plus 18,900,000 = 19,200,000 DMN, and the pool receives 300,000 DMN paired against whatever ETH was raised at that point.
 
 This is clean from a contract-design perspective. No surplus tokens to manage, no governance over unsold inventory, no airdrops to plan. The 30-minute delay on `partialSeed` is the only anti-grief constraint: it prevents the controller from instantly seeding an empty pool, which would yield zero liquidity and break the AMM. The `genesisMinted > 0` check is the same idea: at least one external buyer must have participated.
 
-The downside of early seeding is economic, not technical. The mining supply is fixed at 18,900,000 PICK regardless of how much genesis sold. The LP side scales linearly with genesis sales. Seeding at 30% means the pool is roughly one third the size it would be at full sell-out, and miners produce new supply at the same rate either way. A thin pool combined with active mining means each mined block pushes the price down harder than it would against a deep pool.
+The downside of early seeding is economic, not technical. The mining supply is fixed at 18,900,000 DMN regardless of how much genesis sold. The LP side scales linearly with genesis sales. Seeding at 30% means the pool is roughly one third the size it would be at full sell-out, and miners produce new supply at the same rate either way. A thin pool combined with active mining means each mined block pushes the price down harder than it would against a deep pool.
 
 Three strategies are reasonable.
 
@@ -137,32 +137,32 @@ The genesis sale collects ETH on the contract and trusts that one of the seed fu
 `refundGenesis` exists to cover both:
 
 ```solidity
-function refundGenesis(uint256 pickAmount) external nonReentrant {
+function refundGenesis(uint256 tokenAmount) external nonReentrant {
     if (genesisComplete)                                  revert GenesisAlreadyComplete();
     if (block.timestamp < deployedAt + REFUND_GRACE)      revert RefundGraceNotPassed();
-    if (pickAmount == 0 || pickAmount % GENESIS_UNIT != 0) revert MustBeUnitMultiple();
+    if (tokenAmount == 0 || tokenAmount % GENESIS_UNIT != 0) revert MustBeUnitMultiple();
 
-    uint256 units   = pickAmount / GENESIS_UNIT;
+    uint256 units   = tokenAmount / GENESIS_UNIT;
     uint256 ethBack = units * GENESIS_PRICE;
 
-    _burn(msg.sender, pickAmount);
-    genesisMinted    -= pickAmount;
+    _burn(msg.sender, tokenAmount);
+    genesisMinted    -= tokenAmount;
     genesisEthRaised -= ethBack;
 
     (bool ok,) = msg.sender.call{value: ethBack}("");
     if (!ok) revert EthTransferFailed();
 
-    emit GenesisRefund(msg.sender, ethBack, pickAmount);
+    emit GenesisRefund(msg.sender, ethBack, tokenAmount);
 }
 ```
 
-`REFUND_GRACE` is fixed at 3 days. Any holder of genesis-minted PICK can call `refundGenesis(amount)` once the grace has passed, provided the pool has not yet been seeded. The function burns the caller's PICK and returns ETH at the original 0.01 ETH per 1,000 PICK rate. Multiple partial refunds are permitted.
+`REFUND_GRACE` is fixed at 3 days. Any holder of genesis-minted DMN can call `refundGenesis(amount)` once the grace has passed, provided the pool has not yet been seeded. The function burns the caller's DMN and returns ETH at the original 0.01 ETH per 1,000 DMN rate. Multiple partial refunds are permitted.
 
 Three properties keep the function safe.
 
 The function is gated on `!genesisComplete`. After `seedPool` or `partialSeed` runs, the ETH is no longer on the contract; it is liquidity in the V4 pool, locked by the hook, unreachable. Refunds become impossible from that moment forward, by design. Holders who want out post-seed sell into the pool at the AMM price.
 
-The unit-multiple check forces `pickAmount` to be a multiple of 1,000 PICK. This avoids rounding issues and matches the genesis purchase granularity exactly. Half-unit refunds would create dust counters that drift apart from `genesisEthRaised`.
+The unit-multiple check forces `tokenAmount` to be a multiple of 1,000 DMN. This avoids rounding issues and matches the genesis purchase granularity exactly. Half-unit refunds would create dust counters that drift apart from `genesisEthRaised`.
 
 The `_burn` happens before the ETH transfer. Reentrancy through the recipient cannot replay a refund the caller has not first burned. Combined with the `nonReentrant` modifier, this leaves no path for double-spending the position.
 
@@ -182,41 +182,41 @@ First, check that the contract address has the correct V4 hook permission bits. 
 
 Second, read the constants directly from chain. Call `TOTAL_SUPPLY`, `MINING_SUPPLY`, `GENESIS_CAP`, `BASE_REWARD`, `ERA_MINTS`, `EPOCH_BLOCKS`, `ADJUSTMENT_INTERVAL`, and `MAX_MINTS_PER_BLOCK`. Each must match the values stated here.
 
-Third, try to remove liquidity from the PICK/ETH pool through any V4 router or position manager. The call reverts with `InvalidAction()`. The revert is unconditional and originates from the hook itself, not from any access-controlled flag.
+Third, try to remove liquidity from the DMN/ETH pool through any V4 router or position manager. The call reverts with `InvalidAction()`. The revert is unconditional and originates from the hook itself, not from any access-controlled flag.
 
 ## Agent alignment
 
-The PICK contract maps cleanly onto the ERC-8004 agent registry model. Three properties of a "trustless agent" are spelled out in the EIP: a stable identity, observable reputation, and verifiable behavior. PICK satisfies all three without any wrapper layer.
+The DMN contract maps cleanly onto the ERC-8004 agent registry model. Three properties of a "trustless agent" are spelled out in the EIP: a stable identity, observable reputation, and verifiable behavior. DMN satisfies all three without any wrapper layer.
 
 The identity is the contract's own address. It is fixed at deploy time, derived deterministically from the CREATE2 init-code hash, and cannot be migrated. There is no upgradable proxy in front, no admin key to rotate, no governance to change ownership. The address is the agent.
 
-The reputation is the contract's on-chain state. `totalMints`, `totalMiningMinted`, accumulated swap fees, the V4 LP NFT held by the controller, the genesis ETH raised: every metric that matters is queryable directly from chain by any indexer. There is no reputation oracle to trust because every claim PICK makes about itself can be checked against its own storage.
+The reputation is the contract's on-chain state. `totalMints`, `totalMiningMinted`, accumulated swap fees, the V4 LP NFT held by the controller, the genesis ETH raised: every metric that matters is queryable directly from chain by any indexer. There is no reputation oracle to trust because every claim DMN makes about itself can be checked against its own storage.
 
 The behavior is verified by the source. The bytecode is the source, the source is the spec, and both are immutable. The hook reverts on liquidity removal. The mint function refuses to pay more than `MINING_SUPPLY`. The `claimFees` function only moves ETH the contract has accumulated, never tokens it has minted. Each of these guarantees is unconditional and originates from the hook itself.
 
-When the canonical ERC-8004 Identity Registry is deployed on mainnet (`0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`), the controller registers PICK with a single call to `register(agentURI)`. The `agentURI` points to a hosted JSON file (`/agent.json`) that lists the contract's capabilities, endpoints, and validation hooks. Indexers like 8004scan pick the new agent up automatically from the `Transfer` event of the registry NFT.
+When the canonical ERC-8004 Identity Registry is deployed on mainnet (`0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`), the controller registers DMN with a single call to `register(agentURI)`. The `agentURI` points to a hosted JSON file (`/agent.json`) that lists the contract's capabilities, endpoints, and validation hooks. Indexers like 8004scan pick the new agent up automatically from the `Transfer` event of the registry NFT.
 
 ## Miner Agent NFTs
 
-A separate ERC-721 collection, `MinerAgent`, gives each PICK participant an on-chain identity in the ERC-8004 sense without modifying the core contract. The mapping is one NFT per address, claimable once, soulbound after mint. Anyone whose PICK balance is non-zero may call `claim()` to mint their own agent NFT. Genesis buyers, miners, and aftermarket buyers all qualify; the only requirement is that the wallet currently holds PICK.
+A separate ERC-721 collection, `MinerAgent`, gives each DMN participant an on-chain identity in the ERC-8004 sense without modifying the core contract. The mapping is one NFT per address, claimable once, soulbound after mint. Anyone whose DMN balance is non-zero may call `claim()` to mint their own agent NFT. Genesis buyers, miners, and aftermarket buyers all qualify; the only requirement is that the wallet currently holds DMN.
 
-The metadata is generated entirely on-chain. `tokenURI` returns a base64-encoded JSON whose `image` field embeds a base64-encoded SVG rendered from live state. The SVG shows the agent ID, the truncated wallet address, the current PICK balance, and a tier label that scales with holdings: Initiate, Bronze, Silver, or Gold. There are no hosted images, no IPFS pins, and no central server in the loop. Every render is reproducible from the contract.
+The metadata is generated entirely on-chain. `tokenURI` returns a base64-encoded JSON whose `image` field embeds a base64-encoded SVG rendered from live state. The SVG shows the agent ID, the truncated wallet address, the current DMN balance, and a tier label that scales with holdings: Initiate, Bronze, Silver, or Gold. There are no hosted images, no IPFS pins, and no central server in the loop. Every render is reproducible from the contract.
 
 Transfers between EOAs revert with `Soulbound()`. Burning and minting are both allowed at the protocol level so that future upgrades to the soulbound semantics are possible without a redeploy, but no burn function is exposed to users today. The NFT is meant to remain attached to the wallet that earned it.
 
-The collection is intentionally lightweight. It does not give holders new rights over PICK. It does not change the supply distribution. It does not introduce new tradeable surface area. Its job is to make ownership of PICK legible to agent-aware tooling and to give participants a single, queryable identity that ERC-8004 indexers can resolve.
+The collection is intentionally lightweight. It does not give holders new rights over DMN. It does not change the supply distribution. It does not introduce new tradeable surface area. Its job is to make ownership of DMN legible to agent-aware tooling and to give participants a single, queryable identity that ERC-8004 indexers can resolve.
 
 ## Limits and caveats
 
 The contract has no upgrade path. If a critical bug is discovered post-launch, there is no fix. The mitigation is the same as Bitcoin's: keep the surface small, audit before deploy, deploy code that has been forked from a contract running in production elsewhere.
 
-Mining on Ethereum mainnet costs real gas. At twenty gwei a `mine()` transaction costs roughly five dollars worth of ETH. The reward in dollar terms must exceed this for mining to remain economically rational. As the price of PICK in the AMM falls below the mining cost, hashrate drops, the network produces fewer than one mint per minute, and difficulty retargets downward. Equilibrium price is whatever clears that condition.
+Mining on Ethereum mainnet costs real gas. At twenty gwei a `mine()` transaction costs roughly five dollars worth of ETH. The reward in dollar terms must exceed this for mining to remain economically rational. As the price of DMN in the AMM falls below the mining cost, hashrate drops, the network produces fewer than one mint per minute, and difficulty retargets downward. Equilibrium price is whatever clears that condition.
 
 Address-binding makes solutions unstealable from the mempool but does nothing against a miner who controls multiple wallets. A miner with surplus hashrate can mine to any address they own. This is the same property Bitcoin has and is not considered a problem; the cost of computing power is what discourages over-extraction.
 
 The 1% swap fee paid to the controller represents an ongoing extraction from swap volume. It is not a token tax. The swap itself executes at the pool's posted price, and the fee is taken from the ETH side via the hook. Buyers and sellers pay equally. The fee can never be raised, lowered, or rerouted because the contract is immutable.
 
-PICK is not a promise. There is no team behind it in the conventional sense. There is no roadmap to deliver against. The contract does what its bytecode does, and nothing more.
+DMN is not a promise. There is no team behind it in the conventional sense. There is no roadmap to deliver against. The contract does what its bytecode does, and nothing more.
 
 ## References
 

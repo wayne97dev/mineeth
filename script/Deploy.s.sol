@@ -2,10 +2,10 @@
 pragma solidity ^0.8.26;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {Pick} from "../src/Pick.sol";
+import {Daemon} from "../src/Daemon.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 
-/// @notice Deploys Pick via the canonical deterministic-deployer factory
+/// @notice Deploys Daemon via the canonical deterministic-deployer factory
 ///         (0x4e59b44847b379578588920cA78FbF26c0B4956C, Arachnid's proxy)
 ///         after mining a CREATE2 salt that yields an address whose
 ///         lower 14 bits match the V4 hook permission flags.
@@ -34,7 +34,7 @@ contract Deploy is Script {
         address permit2         = _envOr("PERMIT2", MAINNET_PERMIT2);
 
         bytes memory initCode = abi.encodePacked(
-            type(Pick).creationCode,
+            type(Daemon).creationCode,
             abi.encode(poolManager, positionManager, permit2)
         );
         bytes32 initCodeHash = keccak256(initCode);
@@ -55,7 +55,7 @@ contract Deploy is Script {
 
         require(predicted.code.length > 0, "no code at predicted address");
         require(uint160(predicted) & HOOK_MASK == HOOK_FLAGS, "hook bits mismatch");
-        console2.log("Pick deployed:  ", predicted);
+        console2.log("Daemon deployed:  ", predicted);
         console2.log("Controller (tx.origin):", tx.origin);
     }
 

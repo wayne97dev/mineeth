@@ -2,8 +2,8 @@
 
 import { useReadContracts } from "wagmi";
 import { formatUnits } from "viem";
-import { pickAbi } from "@/lib/pickAbi";
-import { PICK_ADDRESS } from "@/lib/contract";
+import { daemonAbi } from "@/lib/daemonAbi";
+import { DAEMON_ADDRESS } from "@/lib/contract";
 
 type StatCardProps = {
   label: string;
@@ -46,7 +46,7 @@ function ProgressBar({ value, max }: { value: bigint; max: bigint }) {
         <span>{pct.toFixed(4)}%</span>
         <span>
           {formatUnits(value, 18).split(".")[0]} /{" "}
-          {formatUnits(max, 18).split(".")[0]} PICK
+          {formatUnits(max, 18).split(".")[0]} DMN
         </span>
       </div>
     </div>
@@ -72,10 +72,10 @@ const PLACEHOLDER = "—";
 export function Stats() {
   const reads = useReadContracts({
     contracts: [
-      { address: PICK_ADDRESS, abi: pickAbi, functionName: "miningState" },
-      { address: PICK_ADDRESS, abi: pickAbi, functionName: "genesisState" },
-      { address: PICK_ADDRESS, abi: pickAbi, functionName: "MINING_SUPPLY" },
-      { address: PICK_ADDRESS, abi: pickAbi, functionName: "GENESIS_CAP" },
+      { address: DAEMON_ADDRESS, abi: daemonAbi, functionName: "miningState" },
+      { address: DAEMON_ADDRESS, abi: daemonAbi, functionName: "genesisState" },
+      { address: DAEMON_ADDRESS, abi: daemonAbi, functionName: "MINING_SUPPLY" },
+      { address: DAEMON_ADDRESS, abi: daemonAbi, functionName: "GENESIS_CAP" },
     ],
     query: { refetchInterval: 12_000 },
   });
@@ -121,7 +121,7 @@ export function Stats() {
         />
         <StatCard
           label="reward"
-          value={`${formatUnits(reward, 18)} PICK`}
+          value={`${formatUnits(reward, 18)} DMN`}
         />
         <StatCard
           label="difficulty"

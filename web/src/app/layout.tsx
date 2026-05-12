@@ -14,9 +14,10 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PICK — mined ERC-20",
+  title: "Daemon — mined ERC-20 agent",
   description:
-    "PICK is a mined ERC-20 with a self-hook. The token, the V4 hook, and the PoW miner are the same contract.",
+    "Daemon ($DMN) is a mined ERC-20 with a self-hook and an ERC-8004 agent identity. The token, the V4 hook, and the PoW miner are the same contract.",
+  icons: { icon: "/favicon.png" },
 };
 
 export default function RootLayout({

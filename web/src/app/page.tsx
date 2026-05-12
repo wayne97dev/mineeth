@@ -20,7 +20,7 @@ export default function Page() {
              style={{ color: "var(--fg-muted)" }}>
             One contract, three roles: the ERC-20 token, the Uniswap V4 hook
             that collects 1% of every swap, and the PoW miner that releases
-            18.9M PICK over time. No owner. No mint key. No proxy.
+            18.9M DMN over time. No owner. No mint key. No proxy.
           </p>
         </section>
 
@@ -37,7 +37,7 @@ export default function Page() {
 
         <footer className="pt-8 border-t font-mono text-xs space-y-1"
                 style={{ borderColor: "var(--border)", color: "var(--fg-muted)" }}>
-          <div>total supply: 21,000,000 PICK</div>
+          <div>total supply: 21,000,000 DMN</div>
           <div>genesis: 5% (1.05M) · LP: 5% (1.05M) · mining: 90% (18.9M)</div>
           <div>retarget: every 2,016 mints, ±4× clamped</div>
           <div>halving: every 100,000 mints</div>

@@ -2,11 +2,11 @@
 pragma solidity ^0.8.26;
 
 import {Test, console2} from "forge-std/Test.sol";
-import {Pick} from "../src/Pick.sol";
+import {Daemon} from "../src/Daemon.sol";
 
 /// @notice End-to-end fork tests against mainnet V4. Requires MAINNET_RPC env.
-///         Run with:  forge test --match-contract PickFork -vv
-contract PickForkTest is Test {
+///         Run with:  forge test --match-contract DaemonFork -vv
+contract DaemonForkTest is Test {
     address constant POOL_MANAGER     = 0x000000000004444c5dc75cB358380D2e3dE08A90;
     address constant POSITION_MANAGER = 0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e;
     address constant PERMIT2          = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
@@ -20,13 +20,13 @@ contract PickForkTest is Test {
     uint256 constant SLOT_GENESIS_COMPLETE   = 8;
     uint256 constant SLOT_CURRENT_DIFFICULTY = 11;
 
-    Pick internal pick;
+    Daemon internal daemon;
 
     function setUp() public {
         vm.createSelectFork(vm.envString("MAINNET_RPC"));
 
         bytes memory initCode = abi.encodePacked(
-            type(Pick).creationCode,
+            type(Daemon).creationCode,
             abi.encode(POOL_MANAGER, POSITION_MANAGER, PERMIT2)
         );
         bytes32 initCodeHash = keccak256(initCode);
@@ -40,9 +40,9 @@ contract PickForkTest is Test {
         require(ok, "create2 deploy failed");
         require(predicted.code.length > 0, "no code at predicted");
 
-        pick = Pick(payable(predicted));
+        daemon = Daemon(payable(predicted));
         require(uint160(predicted) & HOOK_MASK == HOOK_FLAGS, "bad hook bits");
-        require(pick.controller() == address(this), "controller mismatch");
+        require(daemon.controller() == address(this), "controller mismatch");
     }
 
     /// Verifies seedPool against real V4: we shortcut the 210-tx genesis fill
@@ -50,42 +50,42 @@ contract PickForkTest is Test {
     /// LP minting, and Permit2 approvals.
     function test_seedPool_completes() public {
         uint256 eth = 10.5 ether;
-        vm.store(address(pick), bytes32(SLOT_GENESIS_MINTED), bytes32(pick.GENESIS_CAP()));
-        vm.store(address(pick), bytes32(SLOT_GENESIS_ETH_RAISED), bytes32(eth));
-        vm.deal(address(pick), eth);
+        vm.store(address(daemon), bytes32(SLOT_GENESIS_MINTED), bytes32(daemon.GENESIS_CAP()));
+        vm.store(address(daemon), bytes32(SLOT_GENESIS_ETH_RAISED), bytes32(eth));
+        vm.deal(address(daemon), eth);
 
-        pick.seedPool();
+        daemon.seedPool();
 
-        assertTrue(pick.genesisComplete(), "genesis not complete");
-        assertGt(pick.currentDifficulty(), 0, "difficulty not set");
+        assertTrue(daemon.genesisComplete(), "genesis not complete");
+        assertGt(daemon.currentDifficulty(), 0, "difficulty not set");
         // V4 liquidity math can leave a few wei of dust above MINING_SUPPLY;
         // tolerate up to 10k wei (extremely tight relative to 18.9M * 1e18).
         assertApproxEqAbs(
-            pick.balanceOf(address(pick)),
-            pick.MINING_SUPPLY(),
+            daemon.balanceOf(address(daemon)),
+            daemon.MINING_SUPPLY(),
             10_000,
             "mining supply not held by contract"
         );
-        assertGe(pick.balanceOf(address(pick)), pick.MINING_SUPPLY(), "below mining supply");
+        assertGe(daemon.balanceOf(address(daemon)), daemon.MINING_SUPPLY(), "below mining supply");
     }
 
     /// After seedPool, mine() should be callable. We slam difficulty to max
     /// so any nonce satisfies the proof, then verify a successful mint.
     function test_mine_afterSeed() public {
         uint256 eth = 10.5 ether;
-        vm.store(address(pick), bytes32(SLOT_GENESIS_MINTED), bytes32(pick.GENESIS_CAP()));
-        vm.store(address(pick), bytes32(SLOT_GENESIS_ETH_RAISED), bytes32(eth));
-        vm.deal(address(pick), eth);
-        pick.seedPool();
+        vm.store(address(daemon), bytes32(SLOT_GENESIS_MINTED), bytes32(daemon.GENESIS_CAP()));
+        vm.store(address(daemon), bytes32(SLOT_GENESIS_ETH_RAISED), bytes32(eth));
+        vm.deal(address(daemon), eth);
+        daemon.seedPool();
 
-        vm.store(address(pick), bytes32(SLOT_CURRENT_DIFFICULTY), bytes32(type(uint256).max));
+        vm.store(address(daemon), bytes32(SLOT_CURRENT_DIFFICULTY), bytes32(type(uint256).max));
 
         address miner = address(0xBEEF);
         vm.prank(miner);
-        pick.mine(1);
+        daemon.mine(1);
 
-        assertEq(pick.balanceOf(miner), pick.BASE_REWARD(), "miner did not receive reward");
-        assertEq(pick.totalMints(), 1);
+        assertEq(daemon.balanceOf(miner), daemon.BASE_REWARD(), "miner did not receive reward");
+        assertEq(daemon.totalMints(), 1);
     }
 
     /// partialSeed path: only controller can call, must wait 30 min, requires
@@ -94,15 +94,15 @@ contract PickForkTest is Test {
         address buyer = address(0xABCD);
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
-        pick.mintGenesis{value: 0.05 ether}(5);
+        daemon.mintGenesis{value: 0.05 ether}(5);
 
-        assertEq(pick.genesisMinted(), 5_000e18);
+        assertEq(daemon.genesisMinted(), 5_000e18);
 
         vm.warp(block.timestamp + 30 minutes + 1);
-        pick.partialSeed();
+        daemon.partialSeed();
 
-        assertTrue(pick.genesisComplete());
-        assertGt(pick.currentDifficulty(), 0);
+        assertTrue(daemon.genesisComplete());
+        assertGt(daemon.currentDifficulty(), 0);
     }
 
     /// partialSeed must revert before the 30 minute delay.
@@ -110,10 +110,10 @@ contract PickForkTest is Test {
         address buyer = address(0xABCD);
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
-        pick.mintGenesis{value: 0.05 ether}(5);
+        daemon.mintGenesis{value: 0.05 ether}(5);
 
-        vm.expectRevert(Pick.TooSoon.selector);
-        pick.partialSeed();
+        vm.expectRevert(Daemon.TooSoon.selector);
+        daemon.partialSeed();
     }
 
     /// partialSeed must revert if called by anyone other than the controller.
@@ -121,12 +121,12 @@ contract PickForkTest is Test {
         address buyer = address(0xABCD);
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
-        pick.mintGenesis{value: 0.05 ether}(5);
+        daemon.mintGenesis{value: 0.05 ether}(5);
 
         vm.warp(block.timestamp + 30 minutes + 1);
         vm.prank(buyer);
-        vm.expectRevert(Pick.NotController.selector);
-        pick.partialSeed();
+        vm.expectRevert(Daemon.NotController.selector);
+        daemon.partialSeed();
     }
 
     function _mineSalt(bytes32 initCodeHash) internal pure returns (bytes32, address) {

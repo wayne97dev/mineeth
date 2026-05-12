@@ -1,7 +1,7 @@
 {
-  "name": "pick-miner",
+  "name": "daemon-miner",
   "type": "module",
-  "description": "Browser-side keccak256 PoW miner for the PICK ERC-20 contract",
+  "description": "Browser-side keccak256 PoW miner for the DMN ERC-20 contract",
   "version": "0.1.0",
   "license": "MIT",
   "files": [

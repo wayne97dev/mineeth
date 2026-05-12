@@ -1,4 +1,4 @@
-export const pickAbi = [
+export const daemonAbi = [
   {
     "type": "constructor",
     "inputs": [
@@ -1520,7 +1520,7 @@ export const pickAbi = [
     "name": "refundGenesis",
     "inputs": [
       {
-        "name": "pickAmount",
+        "name": "tokenAmount",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -1808,7 +1808,7 @@ export const pickAbi = [
         "internalType": "uint256"
       },
       {
-        "name": "pickBurned",
+        "name": "tokenBurned",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"

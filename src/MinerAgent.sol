@@ -11,25 +11,25 @@ interface IERC2981 is IERC165 {
         external view returns (address receiver, uint256 royaltyAmount);
 }
 
-interface IPick {
+interface IDaemon {
     function balanceOf(address account) external view returns (uint256);
     function totalMints() external view returns (uint256);
     function totalMiningMinted() external view returns (uint256);
 }
 
 /// @title MinerAgent
-/// @notice Soulbound ERC-721 collection that gives each PICK holder a
+/// @notice Soulbound ERC-721 collection that gives each DMN holder a
 ///         self-contained on-chain identity, ERC-8004 aligned. One agent
 ///         NFT per address; transfers are blocked because the token
 ///         represents proof of participation, not a tradeable asset.
-///         Metadata + image are generated on-chain from live PICK state,
+///         Metadata + image are generated on-chain from live DMN state,
 ///         so the badge reflects the holder's current standing without
 ///         off-chain hosting.
 contract MinerAgent is ERC721, IERC2981 {
     using Strings for uint256;
     using Strings for address;
 
-    IPick public immutable pick;
+    IDaemon public immutable daemon;
 
     /// @notice The only address allowed to swap external metadata URIs or
     ///         freeze them. Set once at construction.
@@ -61,27 +61,27 @@ contract MinerAgent is ERC721, IERC2981 {
     error NotURIUpdater();
     error MetadataAlreadyLocked();
 
-    event AgentMinted(address indexed agent, uint256 indexed tokenId, uint256 pickHeldAtClaim);
+    event AgentMinted(address indexed agent, uint256 indexed tokenId, uint256 heldBalanceAtClaim);
     event ExternalContractURISet(string uri);
     event ExternalBaseURISet(string uri);
     event MetadataLocked();
 
-    constructor(IPick pick_) ERC721("PICK Miner Agent", "PMA") {
-        pick = pick_;
+    constructor(IDaemon daemon_) ERC721("Daemon Miner Agent", "DMA") {
+        daemon = daemon_;
         uriUpdater = msg.sender;
     }
 
     /// @notice Mint one MinerAgent NFT to `msg.sender`. Eligibility = holds
-    ///         any non-zero amount of PICK. One claim per address, ever.
+    ///         any non-zero amount of DMN. One claim per address, ever.
     function claim() external returns (uint256 tokenId) {
         if (agentIdOf[msg.sender] != 0)         revert AlreadyClaimed();
-        if (pick.balanceOf(msg.sender) == 0)    revert NotEligible();
+        if (daemon.balanceOf(msg.sender) == 0)    revert NotEligible();
 
         unchecked { tokenId = ++totalAgents; }
         agentIdOf[msg.sender] = tokenId;
         _safeMint(msg.sender, tokenId);
 
-        emit AgentMinted(msg.sender, tokenId, pick.balanceOf(msg.sender));
+        emit AgentMinted(msg.sender, tokenId, daemon.balanceOf(msg.sender));
     }
 
     // ───────── Soulbound transfer block ─────────
@@ -123,8 +123,8 @@ contract MinerAgent is ERC721, IERC2981 {
             return string(abi.encodePacked(externalBaseURI, tokenId.toString(), ".json"));
         }
         address owner = _ownerOf(tokenId);
-        uint256 pickHeld = pick.balanceOf(owner);
-        return _buildTokenURI(tokenId, owner, pickHeld);
+        uint256 heldBalance = daemon.balanceOf(owner);
+        return _buildTokenURI(tokenId, owner, heldBalance);
     }
 
     /// @notice OpenSea-style collection-level metadata. Either an external
@@ -141,8 +141,8 @@ contract MinerAgent is ERC721, IERC2981 {
         string memory svg = _collectionSvg();
         string memory image = Base64.encode(bytes(svg));
         string memory json = string(abi.encodePacked(
-            '{"name":"PICK Miner Agent",',
-            '"description":"Soulbound ERC-8004 identity NFTs for $PICK participants. One per address, claimable once. Metadata reflects the live PICK holdings of the agent wallet.",',
+            '{"name":"Daemon Miner Agent",',
+            '"description":"Soulbound ERC-8004 identity NFTs for $DMN participants. One per address, claimable once. Metadata reflects the live $DMN holdings of the agent wallet.",',
             '"image":"data:image/svg+xml;base64,', image, '",',
             '"external_link":"https://github.com/wayne97dev/mineeth"}'
         ));
@@ -154,7 +154,7 @@ contract MinerAgent is ERC721, IERC2981 {
             '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">',
               '<rect width="600" height="600" fill="#08080a"/>',
               '<rect x="20" y="20" width="560" height="560" fill="none" stroke="#f4c430" stroke-width="1" opacity="0.4"/>',
-              '<text x="300" y="280" fill="#f4c430" font-family="monospace" font-size="56" font-weight="700" text-anchor="middle">$PICK</text>',
+              '<text x="300" y="280" fill="#f4c430" font-family="monospace" font-size="56" font-weight="700" text-anchor="middle">$DMN</text>',
               '<text x="300" y="330" fill="#ededed" font-family="monospace" font-size="28" font-weight="700" text-anchor="middle">MINER AGENTS</text>',
               '<text x="300" y="370" fill="#5a5a62" font-family="monospace" font-size="12" letter-spacing="4" text-anchor="middle">ERC-8004 IDENTITIES</text>',
               '<text x="300" y="540" fill="#5a5a62" font-family="monospace" font-size="11" letter-spacing="3" text-anchor="middle">SOULBOUND  ON-CHAIN  MIT</text>',
@@ -175,34 +175,34 @@ contract MinerAgent is ERC721, IERC2981 {
             || super.supportsInterface(interfaceId);
     }
 
-    function _buildTokenURI(uint256 tokenId, address owner, uint256 pickHeld)
+    function _buildTokenURI(uint256 tokenId, address owner, uint256 heldBalance)
         internal pure returns (string memory)
     {
-        string memory tier = _tier(pickHeld);
-        string memory image = Base64.encode(bytes(_svg(tokenId, owner, pickHeld, tier)));
-        string memory json = _buildJson(tokenId, owner, pickHeld, tier, image);
+        string memory tier = _tier(heldBalance);
+        string memory image = Base64.encode(bytes(_svg(tokenId, owner, heldBalance, tier)));
+        string memory json = _buildJson(tokenId, owner, heldBalance, tier, image);
         return string(abi.encodePacked("data:application/json;base64,", Base64.encode(bytes(json))));
     }
 
-    function _buildJson(uint256 tokenId, address owner, uint256 pickHeld, string memory tier, string memory image)
+    function _buildJson(uint256 tokenId, address owner, uint256 heldBalance, string memory tier, string memory image)
         internal pure returns (string memory)
     {
         return string(abi.encodePacked(
-            '{"name":"PICK Miner Agent #', tokenId.toString(), '",',
-            '"description":"ERC-8004 aligned identity for a PICK participant. Soulbound; reflects live PICK holdings of the agent wallet.",',
+            '{"name":"Daemon Miner Agent #', tokenId.toString(), '",',
+            '"description":"ERC-8004 aligned identity for a DMN participant. Soulbound; reflects live DMN holdings of the agent wallet.",',
             '"image":"data:image/svg+xml;base64,', image, '",',
             '"attributes":[',
                 '{"trait_type":"Tier","value":"', tier, '"},',
-                '{"trait_type":"PICK Held","display_type":"number","value":', (pickHeld / 1e18).toString(), '},',
+                '{"trait_type":"DMN Held","display_type":"number","value":', (heldBalance / 1e18).toString(), '},',
                 '{"trait_type":"Agent Wallet","value":"', Strings.toHexString(uint160(owner), 20), '"}',
             ']}'
         ));
     }
 
-    function _tier(uint256 pickHeld) internal pure returns (string memory) {
-        if (pickHeld >= 10_000e18) return "Gold";
-        if (pickHeld >= 1_000e18)  return "Silver";
-        if (pickHeld >= 100e18)    return "Bronze";
+    function _tier(uint256 heldBalance) internal pure returns (string memory) {
+        if (heldBalance >= 10_000e18) return "Gold";
+        if (heldBalance >= 1_000e18)  return "Silver";
+        if (heldBalance >= 100e18)    return "Bronze";
         return "Initiate";
     }
 
@@ -214,13 +214,13 @@ contract MinerAgent is ERC721, IERC2981 {
         return "#7a7a82";
     }
 
-    function _svg(uint256 tokenId, address owner, uint256 pickHeld, string memory tier)
+    function _svg(uint256 tokenId, address owner, uint256 heldBalance, string memory tier)
         internal pure returns (string memory)
     {
         string memory color = _tierColor(tier);
         return string(abi.encodePacked(
             _svgHeader(color),
-            _svgBody(tokenId, owner, pickHeld, color),
+            _svgBody(tokenId, owner, heldBalance, color),
             _svgFooter(tier, color)
         ));
     }
@@ -230,12 +230,12 @@ contract MinerAgent is ERC721, IERC2981 {
             '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">',
               '<rect width="400" height="400" fill="#08080a"/>',
               '<rect x="14" y="14" width="372" height="372" fill="none" stroke="', color, '" stroke-width="1" opacity="0.4"/>',
-              '<text x="28" y="46" fill="', color, '" font-family="monospace" font-size="13" font-weight="700" letter-spacing="2">$PICK MINER AGENT</text>',
+              '<text x="28" y="46" fill="', color, '" font-family="monospace" font-size="13" font-weight="700" letter-spacing="2">DAEMON MINER AGENT</text>',
               '<text x="28" y="64" fill="#5a5a62" font-family="monospace" font-size="9" letter-spacing="3">ERC-8004 IDENTITY</text>'
         ));
     }
 
-    function _svgBody(uint256 tokenId, address owner, uint256 pickHeld, string memory color)
+    function _svgBody(uint256 tokenId, address owner, uint256 heldBalance, string memory color)
         internal pure returns (string memory)
     {
         string memory addrShort = string(abi.encodePacked(
@@ -246,8 +246,8 @@ contract MinerAgent is ERC721, IERC2981 {
         return string(abi.encodePacked(
             '<text x="28" y="220" fill="#ededed" font-family="monospace" font-size="64" font-weight="700">#', tokenId.toString(), '</text>',
             '<text x="28" y="252" fill="#c8c8cc" font-family="monospace" font-size="13">', addrShort, '</text>',
-            '<text x="28" y="306" fill="#8a8a92" font-family="monospace" font-size="9" letter-spacing="2">PICK HELD</text>',
-            '<text x="28" y="338" fill="', color, '" font-family="monospace" font-size="28" font-weight="700">', (pickHeld / 1e18).toString(), '</text>'
+            '<text x="28" y="306" fill="#8a8a92" font-family="monospace" font-size="9" letter-spacing="2">DMN HELD</text>',
+            '<text x="28" y="338" fill="', color, '" font-family="monospace" font-size="28" font-weight="700">', (heldBalance / 1e18).toString(), '</text>'
         ));
     }
 

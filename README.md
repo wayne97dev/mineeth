@@ -1,4 +1,4 @@
-# PICK
+# DMN
 
 Mined ERC-20 with a self-hook — the token contract IS its own Uniswap V4
 hook. One address, one bytecode: the token, the hook, and the PoW miner
@@ -8,16 +8,16 @@ Logic forked 1:1 from `hash256.org` (MIT). Branding and frontend are new.
 
 ## Architecture
 
-- **Token** — ERC-20 named `Pick` / `PICK`, 21M cap, 18 decimals.
-- **Genesis sale** — 1.05M PICK (5%) sold at `0.01 ETH` per `1,000 PICK`,
+- **Token** — ERC-20 named `Daemon` / `DMN`, 21M cap, 18 decimals.
+- **Genesis sale** — 1.05M DMN (5%) sold at `0.01 ETH` per `1,000 DMN`,
   max 5 units per tx. ETH raised goes into the Uniswap V4 pool.
 - **Pool seeding** — once genesis is sold out (or 30 min after deploy via
-  `partialSeed`), 1.05M PICK + raised ETH form the V4 LP; the controller
+  `partialSeed`), 1.05M DMN + raised ETH form the V4 LP; the controller
   receives the LP position.
-- **Mining** — 18.9M PICK (90%) released via PoW.
+- **Mining** — 18.9M DMN (90%) released via PoW.
   - Challenge: `keccak256(keccak256(chainId, contract, miner, epoch), nonce) < currentDifficulty`
   - Epoch: every 100 blocks (~20 min)
-  - Reward: `100 PICK >> era`, era = `totalMints / 100_000`
+  - Reward: `100 DMN >> era`, era = `totalMints / 100_000`
   - Retarget: every 2016 mints, clamped ±4×
   - Cap: 10 mints/block
   - Replay protection: per-(miner, nonce, epoch)

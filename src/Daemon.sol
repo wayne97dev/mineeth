@@ -2,16 +2,16 @@
 pragma solidity ^0.8.26;
 
 /*
-   ██████╗ ██╗ ██████╗██╗  ██╗
-   ██╔══██╗██║██╔════╝██║ ██╔╝
-   ██████╔╝██║██║     █████╔╝
-   ██╔═══╝ ██║██║     ██╔═██╗
-   ██║     ██║╚██████╗██║  ██╗
-   ╚═╝     ╚═╝ ╚═════╝╚═╝  ╚═╝
+   ██████╗  █████╗ ███████╗███╗   ███╗ ██████╗ ███╗   ██╗
+   ██╔══██╗██╔══██╗██╔════╝████╗ ████║██╔═══██╗████╗  ██║
+   ██║  ██║███████║█████╗  ██╔████╔██║██║   ██║██╔██╗ ██║
+   ██║  ██║██╔══██║██╔══╝  ██║╚██╔╝██║██║   ██║██║╚██╗██║
+   ██████╔╝██║  ██║███████╗██║ ╚═╝ ██║╚██████╔╝██║ ╚████║
+   ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
 
-   Mined ERC20 with a self-hook — the token contract IS
-   its own Uniswap V4 hook. One address, one bytecode:
-   the token, the hook, and the PoW miner are the same.
+   Mined ERC20 with a self-hook. The token contract IS
+   its own Uniswap V4 hook and its own PoW miner. One
+   address, one bytecode, one autonomous agent.
 */
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -36,7 +36,7 @@ interface IAllowanceTransfer {
     function approve(address token, address spender, uint160 amount, uint48 expiration) external;
 }
 
-contract Pick is ERC20, IHooks, ReentrancyGuard {
+contract Daemon is ERC20, IHooks, ReentrancyGuard {
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
     using BalanceDeltaLibrary for BalanceDelta;
@@ -66,7 +66,7 @@ contract Pick is ERC20, IHooks, ReentrancyGuard {
     uint256 public constant PARTIAL_SEED_DELAY = 30 minutes;
 
     /// @notice Window after deploy after which any genesis buyer can call
-    ///         `refundGenesis` to redeem their PICK for the ETH they paid,
+    ///         `refundGenesis` to redeem their DMN for the ETH they paid,
     ///         provided the pool has not yet been seeded. Acts as a safety
     ///         net if `seedPool` / `partialSeed` cannot complete.
     uint256 public constant REFUND_GRACE = 3 days;
@@ -125,13 +125,13 @@ contract Pick is ERC20, IHooks, ReentrancyGuard {
     event Halving(uint256 era, uint256 newReward);
     event FeeCollected(address indexed origin, bool isBuy, uint256 fee);
     event FeesClaimed(address indexed to, uint256 amount);
-    event GenesisRefund(address indexed buyer, uint256 ethReturned, uint256 pickBurned);
+    event GenesisRefund(address indexed buyer, uint256 ethReturned, uint256 tokenBurned);
 
     constructor(
         IPoolManager poolManager_,
         address      positionManager_,
         address      permit2_
-    ) ERC20("Pick", "PICK") {
+    ) ERC20("Daemon", "DMN") {
         require(address(poolManager_) != address(0));
         require(positionManager_      != address(0));
         require(permit2_              != address(0));
@@ -146,12 +146,12 @@ contract Pick is ERC20, IHooks, ReentrancyGuard {
     function mintGenesis(uint256 units) external payable nonReentrant {
         if (genesisComplete)                          revert GenesisAlreadyComplete();
         if (units == 0 || units > MAX_UNITS_PER_TX)   revert TxCapExceeded();
-        uint256 pickAmount = units * GENESIS_UNIT;
+        uint256 tokenAmount = units * GENESIS_UNIT;
         uint256 cost       = units * GENESIS_PRICE;
         if (msg.value < cost)                         revert InsufficientPayment();
-        if (genesisMinted + pickAmount > GENESIS_CAP) revert GenesisSoldOut();
+        if (genesisMinted + tokenAmount > GENESIS_CAP) revert GenesisSoldOut();
 
-        genesisMinted    += pickAmount;
+        genesisMinted    += tokenAmount;
         genesisEthRaised += cost;
 
         uint256 excess = msg.value - cost;
@@ -160,35 +160,35 @@ contract Pick is ERC20, IHooks, ReentrancyGuard {
             if (!ok) revert EthTransferFailed();
         }
 
-        _mint(msg.sender, pickAmount);
-        emit GenesisMint(msg.sender, cost, pickAmount);
+        _mint(msg.sender, tokenAmount);
+        emit GenesisMint(msg.sender, cost, tokenAmount);
     }
 
     /// @notice Genesis buyer escape hatch. After `REFUND_GRACE` from deploy,
-    ///         if the pool has not been seeded yet, holders of genesis PICK
+    ///         if the pool has not been seeded yet, holders of genesis DMN
     ///         can burn their balance back to the contract and recover the
-    ///         ETH at the original 0.01 ETH / 1,000 PICK price. Useful when
+    ///         ETH at the original 0.01 ETH / 1,000 DMN price. Useful when
     ///         seeding is technically blocked and would otherwise lock
     ///         buyer ETH on the contract forever.
-    function refundGenesis(uint256 pickAmount) external nonReentrant {
+    function refundGenesis(uint256 tokenAmount) external nonReentrant {
         if (genesisComplete)                                  revert GenesisAlreadyComplete();
         if (block.timestamp < deployedAt + REFUND_GRACE)      revert RefundGraceNotPassed();
-        if (pickAmount == 0 || pickAmount % GENESIS_UNIT != 0) revert MustBeUnitMultiple();
+        if (tokenAmount == 0 || tokenAmount % GENESIS_UNIT != 0) revert MustBeUnitMultiple();
 
-        uint256 units   = pickAmount / GENESIS_UNIT;
+        uint256 units   = tokenAmount / GENESIS_UNIT;
         uint256 ethBack = units * GENESIS_PRICE;
 
-        // Reverts if the caller does not hold `pickAmount`.
-        _burn(msg.sender, pickAmount);
+        // Reverts if the caller does not hold `tokenAmount`.
+        _burn(msg.sender, tokenAmount);
 
         // Decrement counters so a later `partialSeed` reflects post-refund state.
-        genesisMinted    -= pickAmount;
+        genesisMinted    -= tokenAmount;
         genesisEthRaised -= ethBack;
 
         (bool ok,) = msg.sender.call{value: ethBack}("");
         if (!ok) revert EthTransferFailed();
 
-        emit GenesisRefund(msg.sender, ethBack, pickAmount);
+        emit GenesisRefund(msg.sender, ethBack, tokenAmount);
     }
 
     function seedPool() external nonReentrant {
@@ -209,9 +209,9 @@ contract Pick is ERC20, IHooks, ReentrancyGuard {
         genesisComplete = true;
 
         uint256 eth    = genesisEthRaised;
-        uint256 pickLP = genesisMinted;
+        uint256 tokenLP = genesisMinted;
 
-        _mint(address(this), pickLP + MINING_SUPPLY);
+        _mint(address(this), tokenLP + MINING_SUPPLY);
 
         poolKey = PoolKey({
             currency0:   CurrencyLibrary.ADDRESS_ZERO,
@@ -221,7 +221,7 @@ contract Pick is ERC20, IHooks, ReentrancyGuard {
             hooks:       IHooks(address(this))
         });
 
-        uint160 sqrtPriceX96 = _sqrtPriceX96FromAmounts(eth, pickLP);
+        uint160 sqrtPriceX96 = _sqrtPriceX96FromAmounts(eth, tokenLP);
         poolManager.initialize(poolKey, sqrtPriceX96);
 
         uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
@@ -229,7 +229,7 @@ contract Pick is ERC20, IHooks, ReentrancyGuard {
             TickMath.getSqrtPriceAtTick(TICK_LOWER),
             TickMath.getSqrtPriceAtTick(TICK_UPPER),
             eth,
-            pickLP
+            tokenLP
         );
         if (liquidity == 0) revert InsufficientLiquidity();
 
@@ -253,7 +253,7 @@ contract Pick is ERC20, IHooks, ReentrancyGuard {
             TICK_UPPER,
             liquidity,
             eth,
-            pickLP,
+            tokenLP,
             controller,
             bytes("")
         );
@@ -264,8 +264,8 @@ contract Pick is ERC20, IHooks, ReentrancyGuard {
             block.timestamp + 120
         );
 
-        emit LiquidityAdded(eth, pickLP, liquidity);
-        emit PoolSeeded(eth, pickLP, sqrtPriceX96);
+        emit LiquidityAdded(eth, tokenLP, liquidity);
+        emit PoolSeeded(eth, tokenLP, sqrtPriceX96);
     }
 
     function _permissions() internal pure returns (Hooks.Permissions memory) {

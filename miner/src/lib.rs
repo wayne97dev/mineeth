@@ -4,7 +4,7 @@ use wasm_bindgen::prelude::*;
 /// Search `count` consecutive nonces starting from `start_nonce` for a value
 /// `n` such that `keccak256(challenge || abi.encode(uint256(n))) < target`.
 ///
-/// This mirrors the Pick contract's check:
+/// This mirrors the Daemon contract's check:
 ///   `keccak256(abi.encode(_challenge(msg.sender), nonce)) < currentDifficulty`
 ///
 /// `challenge` must be the 32-byte output of `pick.getChallenge(miner)`.

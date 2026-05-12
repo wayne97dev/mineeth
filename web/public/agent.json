@@ -1,11 +1,11 @@
 {
   "$schema": "https://eips.ethereum.org/EIPS/eip-8004",
-  "name": "PICK",
-  "description": "PICK is a mined ERC-20 token whose contract is also its own Uniswap V4 swap hook. One bytecode, one address. The token, the hook, and the PoW miner are the same contract. No owner, no upgrade path, no admin keys. PICK is autonomous: it accepts genesis purchases, seeds its own V4 liquidity pool when ready, locks the LP forever via hook reverts on liquidity modifications, takes a 1% swap fee on all trades, and pays mining rewards in PoW-bound nonces. Everything is verifiable on-chain.",
+  "name": "Daemon",
+  "description": "DMN is a mined ERC-20 token whose contract is also its own Uniswap V4 swap hook. One bytecode, one address. The token, the hook, and the PoW miner are the same contract. No owner, no upgrade path, no admin keys. DMN is autonomous: it accepts genesis purchases, seeds its own V4 liquidity pool when ready, locks the LP forever via hook reverts on liquidity modifications, takes a 1% swap fee on all trades, and pays mining rewards in PoW-bound nonces. Everything is verifiable on-chain.",
   "version": "1.0.0",
   "type": "token-agent",
   "endpoints": {
-    "contract": "ethereum://PICK_MAINNET_ADDRESS",
+    "contract": "ethereum://DMN_MAINNET_ADDRESS",
     "frontend": "https://CUSTOM_DOMAIN_TBD",
     "whitepaper": "https://CUSTOM_DOMAIN_TBD/whitepaper.pdf",
     "source": "https://github.com/wayne97dev/mineeth"
@@ -13,14 +13,14 @@
   "capabilities": [
     {
       "id": "mintGenesis",
-      "description": "Buy raw PICK at fixed 0.01 ETH per 1,000 PICK during the genesis phase. Max 5 units per tx. Available until genesisComplete = true.",
+      "description": "Buy raw DMN at fixed 0.01 ETH per 1,000 DMN during the genesis phase. Max 5 units per tx. Available until genesisComplete = true.",
       "abi": "mintGenesis(uint256 units)",
       "payable": true
     },
     {
       "id": "refundGenesis",
-      "description": "Burn genesis-minted PICK back to the contract in exchange for the original ETH price, after a 3-day grace period from deploy, if the pool has not been seeded.",
-      "abi": "refundGenesis(uint256 pickAmount)"
+      "description": "Burn genesis-minted DMN back to the contract in exchange for the original ETH price, after a 3-day grace period from deploy, if the pool has not been seeded.",
+      "abi": "refundGenesis(uint256 tokenAmount)"
     },
     {
       "id": "mine",
@@ -29,14 +29,14 @@
     },
     {
       "id": "swap",
-      "description": "Trade PICK against ETH through the locked Uniswap V4 pool. The 1% fee is taken on the ETH side and accrues to the contract balance, claimable by the controller via claimFees().",
+      "description": "Trade DMN against ETH through the locked Uniswap V4 pool. The 1% fee is taken on the ETH side and accrues to the contract balance, claimable by the controller via claimFees().",
       "via": "uniswap-v4-pool",
       "poolKey": {
         "currency0": "0x0000000000000000000000000000000000000000",
-        "currency1": "PICK_MAINNET_ADDRESS",
+        "currency1": "DMN_MAINNET_ADDRESS",
         "fee": 0,
         "tickSpacing": 200,
-        "hooks": "PICK_MAINNET_ADDRESS"
+        "hooks": "DMN_MAINNET_ADDRESS"
       }
     },
     {
@@ -47,12 +47,12 @@
     },
     {
       "id": "seedPool",
-      "description": "Initialize the V4 PICK/ETH pool when genesis is fully sold out. Permissionless.",
+      "description": "Initialize the V4 DMN/ETH pool when genesis is fully sold out. Permissionless.",
       "abi": "seedPool()"
     },
     {
       "id": "partialSeed",
-      "description": "Controller-only seed of the pool with whatever genesis raised so far, callable after 30 minutes from deploy. Unsold genesis PICK is never minted.",
+      "description": "Controller-only seed of the pool with whatever genesis raised so far, callable after 30 minutes from deploy. Unsold genesis DMN is never minted.",
       "abi": "partialSeed()",
       "access": "controller-only"
     }
@@ -79,7 +79,7 @@
   },
   "extensions": {
     "minerAgent": {
-      "description": "Soulbound ERC-721 collection where PICK participants can claim a per-address NFT identity (one per wallet). Metadata and image are generated on-chain from live PICK holdings. Tier scales with PICK held: Initiate < 100, Bronze 100-999, Silver 1000-9999, Gold 10000+.",
+      "description": "Soulbound ERC-721 collection where DMN participants can claim a per-address NFT identity (one per wallet). Metadata and image are generated on-chain from live DMN holdings. Tier scales with DMN held: Initiate < 100, Bronze 100-999, Silver 1000-9999, Gold 10000+.",
       "address": "MINERAGENT_MAINNET_ADDRESS_TBD"
     }
   }

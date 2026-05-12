@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useWatchContractEvent } from "wagmi";
 import { formatUnits, type Address } from "viem";
-import { pickAbi } from "@/lib/pickAbi";
-import { PICK_ADDRESS } from "@/lib/contract";
+import { daemonAbi } from "@/lib/daemonAbi";
+import { DAEMON_ADDRESS } from "@/lib/contract";
 
 type MintEntry = {
   miner: Address;
@@ -41,8 +41,8 @@ export function RecentMints() {
   }, []);
 
   useWatchContractEvent({
-    address: PICK_ADDRESS,
-    abi: pickAbi,
+    address: DAEMON_ADDRESS,
+    abi: daemonAbi,
     eventName: "Mined",
     onLogs(logs) {
       const now = Date.now();
@@ -78,7 +78,7 @@ export function RecentMints() {
                 <span style={{ color: "var(--fg-muted)" }}>{shortAddr(m.miner)}</span>
                 <span style={{ color: "var(--fg)" }}> mined </span>
                 <span style={{ color: "var(--accent)" }}>
-                  {formatUnits(m.reward, 18)} PICK
+                  {formatUnits(m.reward, 18)} DMN
                 </span>
               </span>
               <span style={{ color: "var(--fg-dim)" }} className="text-xs">
