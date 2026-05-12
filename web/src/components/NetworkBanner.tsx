@@ -1,9 +1,9 @@
 "use client";
 
 import { useAccount, useChainId, useSwitchChain } from "wagmi";
-import { sepolia } from "wagmi/chains";
+import { mainnet } from "wagmi/chains";
 
-const EXPECTED_CHAIN = sepolia;
+const EXPECTED_CHAIN = mainnet;
 
 export function NetworkBanner() {
   const { isConnected } = useAccount();

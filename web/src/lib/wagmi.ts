@@ -11,10 +11,10 @@ const rpcMainnet = process.env.NEXT_PUBLIC_MAINNET_RPC;
 const rpcSepolia = process.env.NEXT_PUBLIC_SEPOLIA_RPC;
 
 export const config = getDefaultConfig({
-  appName: "PICK",
+  appName: "Daemon",
   projectId,
-  // Sepolia first so RainbowKit defaults to it (the contract lives there for now).
-  chains: [sepolia, mainnet],
+  // Mainnet first so RainbowKit defaults to it (trial contract lives there).
+  chains: [mainnet, sepolia],
   transports: {
     [mainnet.id]: rpcMainnet ? http(rpcMainnet) : http(),
     [sepolia.id]: rpcSepolia ? http(rpcSepolia) : http(),

@@ -1,4 +1,5 @@
 import { NetworkBanner } from "@/components/NetworkBanner";
+import { TrialBanner } from "@/components/TrialBanner";
 import { Header } from "@/components/Header";
 import { HeroCity } from "@/components/HeroCity";
 import { Stats } from "@/components/Stats";
@@ -10,6 +11,7 @@ import { Trade } from "@/components/Trade";
 export default function Page() {
   return (
     <>
+      <TrialBanner />
       <NetworkBanner />
       <Header />
       <main className="max-w-5xl mx-auto px-6 py-10 space-y-8">
