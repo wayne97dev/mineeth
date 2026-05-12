@@ -1,5 +1,6 @@
 import { NetworkBanner } from "@/components/NetworkBanner";
 import { Header } from "@/components/Header";
+import { HeroCity } from "@/components/HeroCity";
 import { Stats } from "@/components/Stats";
 import { RecentMints } from "@/components/RecentMints";
 import { Genesis } from "@/components/Genesis";
@@ -23,6 +24,8 @@ export default function Page() {
             18.9M DMN over time. No owner. No mint key. No proxy.
           </p>
         </section>
+
+        <HeroCity />
 
         <Stats />
 
