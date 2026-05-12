@@ -33,32 +33,60 @@ export function HeroCity() {
             <stop offset="100%" stopColor="#08080a" stopOpacity="1" />
           </linearGradient>
 
-          {/* One reusable walker silhouette */}
-          <symbol id="walker" viewBox="-6 -22 12 24">
-            <circle cx="0" cy="-17.5" r="2.6" fill="#f4c430" />
+          {/* One reusable walker silhouette.
+              IMPORTANT: this is a <g>, not a <symbol>. With <symbol>, a
+              <use> without explicit width/height scales the content to
+              100% of the parent SVG — turning each silhouette into a
+              giant blob. With <g>, the x/y on <use> is just a translate,
+              and the walker keeps its native ~32px height.
+              Walker's feet sit at y=0; head extends up to y=-32. */}
+          <g id="walker">
+            {/* head */}
+            <circle cx="0" cy="-29" r="3" fill="#f4c430" />
+            {/* body (slight taper, shoulders > waist) */}
             <path
-              d="M-2.6,-14.5 L2.6,-14.5 L2.2,-5 L-2.2,-5 Z"
+              d="M-3.2,-26 L3.2,-26 L2.6,-12 L-2.6,-12 Z"
               fill="#f4c430"
             />
+            {/* arms (subtle swing implied via positions) */}
             <line
-              x1="-1.4"
-              y1="-5"
+              x1="-3.2"
+              y1="-23"
+              x2="-3.8"
+              y2="-14"
+              stroke="#f4c430"
+              strokeWidth="1.2"
+              strokeLinecap="round"
+            />
+            <line
+              x1="3.2"
+              y1="-23"
+              x2="3.8"
+              y2="-14"
+              stroke="#f4c430"
+              strokeWidth="1.2"
+              strokeLinecap="round"
+            />
+            {/* legs */}
+            <line
+              x1="-1.5"
+              y1="-12"
               x2="-1.8"
-              y2="1.5"
+              y2="-1"
               stroke="#f4c430"
-              strokeWidth="1.4"
+              strokeWidth="1.6"
               strokeLinecap="round"
             />
             <line
-              x1="1.4"
-              y1="-5"
+              x1="1.5"
+              y1="-12"
               x2="1.8"
-              y2="1.5"
+              y2="-1"
               stroke="#f4c430"
-              strokeWidth="1.4"
+              strokeWidth="1.6"
               strokeLinecap="round"
             />
-          </symbol>
+          </g>
         </defs>
 
         {/* Sky */}
