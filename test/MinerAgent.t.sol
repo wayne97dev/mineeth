@@ -131,10 +131,10 @@ contract MinerAgentTest is Test {
     }
 
     function test_tier_thresholds() public {
-        // Tier boundaries: Initiate < 100 ≤ Bronze < 1_000 ≤ Silver < 10_000 ≤ Gold
-        daemon.setBalance(alice, 99e18);     // Initiate
-        daemon.setBalance(bob,   100e18);    // Bronze
-        daemon.setBalance(carol, 1_000e18);  // Silver
+        // Tier boundaries: Initiate < 1_000 ≤ Bronze < 10_000 ≤ Silver < 100_000 ≤ Gold
+        daemon.setBalance(alice, 999e18);       // Initiate (one wei short of Bronze)
+        daemon.setBalance(bob,   1_000e18);     // Bronze   (exactly at threshold)
+        daemon.setBalance(carol, 10_000e18);    // Silver   (exactly at threshold)
 
         vm.prank(alice); agent.claim();
         vm.prank(bob);   agent.claim();

@@ -59,9 +59,9 @@ const TIERS = {
 } as const satisfies Record<string, Tier>;
 
 function tierFor(balance: bigint): Tier {
-  if (balance >= 10_000n * 10n ** 18n) return TIERS.gold;
-  if (balance >=  1_000n * 10n ** 18n) return TIERS.silver;
-  if (balance >=    100n * 10n ** 18n) return TIERS.bronze;
+  if (balance >= 100_000n * 10n ** 18n) return TIERS.gold;
+  if (balance >=  10_000n * 10n ** 18n) return TIERS.silver;
+  if (balance >=   1_000n * 10n ** 18n) return TIERS.bronze;
   return TIERS.initiate;
 }
 

@@ -208,9 +208,9 @@ contract MinerAgent is ERC721, IERC2981 {
     }
 
     function _tier(uint256 heldBalance) internal pure returns (string memory) {
-        if (heldBalance >= 10_000e18) return "Gold";
-        if (heldBalance >= 1_000e18)  return "Silver";
-        if (heldBalance >= 100e18)    return "Bronze";
+        if (heldBalance >= 100_000e18) return "Gold";
+        if (heldBalance >=  10_000e18) return "Silver";
+        if (heldBalance >=   1_000e18) return "Bronze";
         return "Initiate";
     }
 
