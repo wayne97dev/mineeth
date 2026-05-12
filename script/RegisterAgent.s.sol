@@ -25,18 +25,27 @@ interface IIdentityRegistry {
 ///     --rpc-url $MAINNET_RPC --account pick-mainnet --broadcast
 contract RegisterAgent is Script {
     address constant IDENTITY_REGISTRY_MAINNET = 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432;
+    address constant IDENTITY_REGISTRY_SEPOLIA = 0x8004A818BFB912233c491871b3d84c89A494BD9e;
+
+    function _registry() internal view returns (address) {
+        if (block.chainid == 1)        return IDENTITY_REGISTRY_MAINNET;
+        if (block.chainid == 11155111) return IDENTITY_REGISTRY_SEPOLIA;
+        revert("Unsupported chain; add registry address to script");
+    }
 
     function run() external {
         string memory uri = vm.envString("AGENT_URI");
+        address registry = _registry();
         console2.log("Agent URI: ", uri);
-        console2.log("Registry:  ", IDENTITY_REGISTRY_MAINNET);
+        console2.log("Registry:  ", registry);
+        console2.log("Chain ID:  ", block.chainid);
 
         vm.startBroadcast();
-        uint256 agentId = IIdentityRegistry(IDENTITY_REGISTRY_MAINNET).register(uri);
+        uint256 agentId = IIdentityRegistry(registry).register(uri);
         vm.stopBroadcast();
 
         console2.log("Agent ID:  ", agentId);
-        console2.log("Owner:     ", IIdentityRegistry(IDENTITY_REGISTRY_MAINNET).ownerOf(agentId));
-        console2.log("URI on chain:", IIdentityRegistry(IDENTITY_REGISTRY_MAINNET).tokenURI(agentId));
+        console2.log("Owner:     ", IIdentityRegistry(registry).ownerOf(agentId));
+        console2.log("URI on chain:", IIdentityRegistry(registry).tokenURI(agentId));
     }
 }
