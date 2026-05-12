@@ -131,7 +131,7 @@ contract Daemon is ERC20, IHooks, ReentrancyGuard {
         IPoolManager poolManager_,
         address      positionManager_,
         address      permit2_
-    ) ERC20("Daemon", "DMN") {
+    ) ERC20("Daemon Test", "DMNT") {
         require(address(poolManager_) != address(0));
         require(positionManager_      != address(0));
         require(permit2_              != address(0));
