@@ -21,7 +21,11 @@ export default function Page() {
              style={{ color: "var(--fg-muted)" }}>
             One contract, three roles: the ERC-20 token, the Uniswap V4 hook
             that collects 1% of every swap, and the PoW miner that releases
-            18.9M DMN over time. No owner. No mint key. No proxy.
+            18.9M DMN over time. Ships with an{" "}
+            <span style={{ color: "var(--accent)" }}>ERC-8004 agent identity</span>{" "}
+            and a soulbound{" "}
+            <span style={{ color: "var(--accent)" }}>Miner Agent NFT</span>{" "}
+            collection. No owner. No mint key. No proxy.
           </p>
         </section>
 
