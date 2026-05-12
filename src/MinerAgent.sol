@@ -31,6 +31,13 @@ contract MinerAgent is ERC721, IERC2981 {
 
     IDaemon public immutable daemon;
 
+    /// @notice Minimum DMN balance required to claim an agent NFT. Set above
+    ///         dust so an attacker can't spin up thousands of wallets, dust
+    ///         each with 1 wei, and farm meaningless Initiate-tier mints.
+    ///         1 full DMN at the genesis price (0.01 ETH per 1k DMN) costs
+    ///         ~10 microETH plus gas — a real economic floor per identity.
+    uint256 public constant MIN_BALANCE_TO_CLAIM = 1e18;
+
     /// @notice The only address allowed to swap external metadata URIs or
     ///         freeze them. Set once at construction.
     address public immutable uriUpdater;
@@ -72,10 +79,11 @@ contract MinerAgent is ERC721, IERC2981 {
     }
 
     /// @notice Mint one MinerAgent NFT to `msg.sender`. Eligibility = holds
-    ///         any non-zero amount of DMN. One claim per address, ever.
+    ///         at least `MIN_BALANCE_TO_CLAIM` DMN (1 full token). One claim
+    ///         per address, ever.
     function claim() external returns (uint256 tokenId) {
-        if (agentIdOf[msg.sender] != 0)         revert AlreadyClaimed();
-        if (daemon.balanceOf(msg.sender) == 0)    revert NotEligible();
+        if (agentIdOf[msg.sender] != 0)                              revert AlreadyClaimed();
+        if (daemon.balanceOf(msg.sender) < MIN_BALANCE_TO_CLAIM)     revert NotEligible();
 
         unchecked { tokenId = ++totalAgents; }
         agentIdOf[msg.sender] = tokenId;

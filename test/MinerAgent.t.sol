@@ -42,6 +42,32 @@ contract MinerAgentTest is Test {
         agent.claim();
     }
 
+    function test_claim_revertsOnDustBalance() public {
+        // 1 wei = below the 1 DMN floor; should be rejected even though
+        // the legacy "balanceOf > 0" check would have let it through.
+        daemon.setBalance(alice, 1);
+        vm.prank(alice);
+        vm.expectRevert(MinerAgent.NotEligible.selector);
+        agent.claim();
+
+        // 0.999... DMN: one wei short of the floor.
+        daemon.setBalance(alice, 1e18 - 1);
+        vm.prank(alice);
+        vm.expectRevert(MinerAgent.NotEligible.selector);
+        agent.claim();
+
+        // Exactly 1 DMN: passes.
+        daemon.setBalance(alice, 1e18);
+        vm.prank(alice);
+        uint256 tokenId = agent.claim();
+        assertEq(tokenId, 1);
+        assertEq(agent.ownerOf(tokenId), alice);
+    }
+
+    function test_minBalanceToClaim_isExposed() public view {
+        assertEq(agent.MIN_BALANCE_TO_CLAIM(), 1e18);
+    }
+
     function test_claim_revertsOnDoubleClaim() public {
         daemon.setBalance(alice, 1_000e18);
         vm.prank(alice);
