@@ -44,6 +44,17 @@ type Activity = {
 
 const MAX_VISIBLE = 12;
 const LOOKBACK_BLOCKS = 50_000n; // ~1 week on mainnet
+const SECONDS_PER_BLOCK = 12;    // mainnet average
+
+/**
+ * Estimate the wall-clock time a past block was mined at. Mainnet is rock-
+ * steady at ~12s/block; this is accurate to within a few seconds across
+ * recent ranges. Avoids an extra `getBlock` round-trip per event.
+ */
+function blockTimestampMs(eventBlock: bigint, currentBlock: bigint): number {
+  const blocksAgo = Number(currentBlock - eventBlock);
+  return Date.now() - blocksAgo * SECONDS_PER_BLOCK * 1000;
+}
 
 const eventGenesisMint = parseAbiItem(
   "event GenesisMint(address indexed buyer, uint256 ethPaid, uint256 hashOut)"
@@ -171,7 +182,8 @@ export function RecentMints() {
         ]);
 
         if (cancelled) return;
-        const now = Date.now();
+        // seenAt is derived per-event from the block number so each row
+        // shows its actual on-chain age, not the moment the page loaded.
         const fresh: Activity[] = [
           ...genLogs.map<Activity>((l) => ({
             kind: "genesis",
@@ -179,7 +191,7 @@ export function RecentMints() {
             amount: (l.args.hashOut as bigint) ?? 0n,
             txHash: l.transactionHash as `0x${string}`,
             blockNumber: l.blockNumber as bigint,
-            seenAt: now,
+            seenAt: blockTimestampMs(l.blockNumber as bigint, currentBlock),
           })),
           ...minedLogs.map<Activity>((l) => ({
             kind: "mined",
@@ -187,7 +199,7 @@ export function RecentMints() {
             amount: (l.args.reward as bigint) ?? 0n,
             txHash: l.transactionHash as `0x${string}`,
             blockNumber: l.blockNumber as bigint,
-            seenAt: now,
+            seenAt: blockTimestampMs(l.blockNumber as bigint, currentBlock),
           })),
           ...feeLogs.map<Activity>((l) => ({
             kind: (l.args.isBuy ? "buy" : "sell") as Kind,
@@ -195,7 +207,7 @@ export function RecentMints() {
             amount: (l.args.fee as bigint) ?? 0n,
             txHash: l.transactionHash as `0x${string}`,
             blockNumber: l.blockNumber as bigint,
-            seenAt: now,
+            seenAt: blockTimestampMs(l.blockNumber as bigint, currentBlock),
           })),
         ];
 
