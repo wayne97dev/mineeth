@@ -130,6 +130,77 @@ contract MinerAgentTest is Test {
         assertEq(agent.symbol(), "PMA");
     }
 
+    // ───────── URI swap mechanism ─────────
+
+    function test_contractURI_defaultsToDataUri() public view {
+        string memory uri = agent.contractURI();
+        assertTrue(_contains(uri, "data:application/json;base64,"));
+    }
+
+    function test_setExternalContractURI_byUpdater() public {
+        agent.setExternalContractURI("ipfs://Qm.../collection.json");
+        assertEq(agent.contractURI(), "ipfs://Qm.../collection.json");
+    }
+
+    function test_setExternalContractURI_revertsForNonUpdater() public {
+        vm.prank(alice);
+        vm.expectRevert(MinerAgent.NotURIUpdater.selector);
+        agent.setExternalContractURI("ipfs://Qm.../collection.json");
+    }
+
+    function test_setExternalBaseURI_changesTokenURI() public {
+        pick.setBalance(alice, 100e18);
+        vm.prank(alice);
+        agent.claim();
+
+        agent.setExternalBaseURI("ipfs://Qm.../tokens/");
+
+        // Token #1 → ipfs://Qm.../tokens/1.json
+        assertEq(agent.tokenURI(1), "ipfs://Qm.../tokens/1.json");
+    }
+
+    function test_setExternalBaseURI_emptyResetsToOnChain() public {
+        pick.setBalance(alice, 100e18);
+        vm.prank(alice);
+        agent.claim();
+
+        agent.setExternalBaseURI("ipfs://Qm.../tokens/");
+        agent.setExternalBaseURI(""); // reset
+        string memory uri = agent.tokenURI(1);
+        assertTrue(_contains(uri, "data:application/json"));
+    }
+
+    function test_lockMetadata_freezesBothSetters() public {
+        agent.lockMetadata();
+
+        vm.expectRevert(MinerAgent.MetadataAlreadyLocked.selector);
+        agent.setExternalContractURI("x");
+
+        vm.expectRevert(MinerAgent.MetadataAlreadyLocked.selector);
+        agent.setExternalBaseURI("x");
+    }
+
+    function test_lockMetadata_revertsForNonUpdater() public {
+        vm.prank(alice);
+        vm.expectRevert(MinerAgent.NotURIUpdater.selector);
+        agent.lockMetadata();
+    }
+
+    // ───────── EIP-2981 ─────────
+
+    function test_royaltyInfo_alwaysZero() public view {
+        (address receiver, uint256 amount) = agent.royaltyInfo(1, 1 ether);
+        assertEq(receiver, address(0));
+        assertEq(amount, 0);
+    }
+
+    function test_supportsInterface_erc2981() public view {
+        // EIP-2981 interfaceId = 0x2a55205a
+        assertTrue(agent.supportsInterface(0x2a55205a));
+        // ERC-721 interfaceId = 0x80ac58cd
+        assertTrue(agent.supportsInterface(0x80ac58cd));
+    }
+
     function _contains(string memory haystack, string memory needle) internal pure returns (bool) {
         bytes memory h = bytes(haystack);
         bytes memory n = bytes(needle);

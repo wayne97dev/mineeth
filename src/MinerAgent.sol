@@ -2,8 +2,14 @@
 pragma solidity ^0.8.26;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
+
+interface IERC2981 is IERC165 {
+    function royaltyInfo(uint256 tokenId, uint256 salePrice)
+        external view returns (address receiver, uint256 royaltyAmount);
+}
 
 interface IPick {
     function balanceOf(address account) external view returns (uint256);
@@ -19,25 +25,50 @@ interface IPick {
 ///         Metadata + image are generated on-chain from live PICK state,
 ///         so the badge reflects the holder's current standing without
 ///         off-chain hosting.
-contract MinerAgent is ERC721 {
+contract MinerAgent is ERC721, IERC2981 {
     using Strings for uint256;
     using Strings for address;
 
     IPick public immutable pick;
+
+    /// @notice The only address allowed to swap external metadata URIs or
+    ///         freeze them. Set once at construction.
+    address public immutable uriUpdater;
+
     uint256 public totalAgents;
 
     /// @notice tokenId minted to each address, 0 if never claimed.
     mapping(address => uint256) public agentIdOf;
 
+    /// @notice Optional override for the collection-level metadata. When set,
+    ///         `contractURI()` returns this string verbatim instead of the
+    ///         default on-chain SVG card.
+    string public externalContractURI;
+
+    /// @notice Optional override for per-token metadata. When set, `tokenURI`
+    ///         returns `externalBaseURI + tokenId + ".json"` instead of the
+    ///         default on-chain SVG.
+    string public externalBaseURI;
+
+    /// @notice Once true, neither `externalContractURI` nor `externalBaseURI`
+    ///         can change again. One-way switch.
+    bool public metadataLocked;
+
     error AlreadyClaimed();
     error NotEligible();
     error Soulbound();
     error NonexistentAgent();
+    error NotURIUpdater();
+    error MetadataAlreadyLocked();
 
     event AgentMinted(address indexed agent, uint256 indexed tokenId, uint256 pickHeldAtClaim);
+    event ExternalContractURISet(string uri);
+    event ExternalBaseURISet(string uri);
+    event MetadataLocked();
 
     constructor(IPick pick_) ERC721("PICK Miner Agent", "PMA") {
         pick = pick_;
+        uriUpdater = msg.sender;
     }
 
     /// @notice Mint one MinerAgent NFT to `msg.sender`. Eligibility = holds
@@ -62,13 +93,86 @@ contract MinerAgent is ERC721 {
         return super._update(to, tokenId, auth);
     }
 
+    // ───────── URI swap controls ─────────
+
+    function setExternalContractURI(string calldata uri) external {
+        if (msg.sender != uriUpdater)  revert NotURIUpdater();
+        if (metadataLocked)            revert MetadataAlreadyLocked();
+        externalContractURI = uri;
+        emit ExternalContractURISet(uri);
+    }
+
+    function setExternalBaseURI(string calldata uri) external {
+        if (msg.sender != uriUpdater)  revert NotURIUpdater();
+        if (metadataLocked)            revert MetadataAlreadyLocked();
+        externalBaseURI = uri;
+        emit ExternalBaseURISet(uri);
+    }
+
+    function lockMetadata() external {
+        if (msg.sender != uriUpdater)  revert NotURIUpdater();
+        metadataLocked = true;
+        emit MetadataLocked();
+    }
+
     // ───────── Dynamic on-chain metadata ─────────
 
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         if (_ownerOf(tokenId) == address(0)) revert NonexistentAgent();
+        if (bytes(externalBaseURI).length > 0) {
+            return string(abi.encodePacked(externalBaseURI, tokenId.toString(), ".json"));
+        }
         address owner = _ownerOf(tokenId);
         uint256 pickHeld = pick.balanceOf(owner);
         return _buildTokenURI(tokenId, owner, pickHeld);
+    }
+
+    /// @notice OpenSea-style collection-level metadata. Either an external
+    ///         URI (when set via `setExternalContractURI`) or an on-chain
+    ///         default card encoded as a data URI.
+    function contractURI() external view returns (string memory) {
+        if (bytes(externalContractURI).length > 0) {
+            return externalContractURI;
+        }
+        return _defaultContractURI();
+    }
+
+    function _defaultContractURI() internal pure returns (string memory) {
+        string memory svg = _collectionSvg();
+        string memory image = Base64.encode(bytes(svg));
+        string memory json = string(abi.encodePacked(
+            '{"name":"PICK Miner Agent",',
+            '"description":"Soulbound ERC-8004 identity NFTs for $PICK participants. One per address, claimable once. Metadata reflects the live PICK holdings of the agent wallet.",',
+            '"image":"data:image/svg+xml;base64,', image, '",',
+            '"external_link":"https://github.com/wayne97dev/mineeth"}'
+        ));
+        return string(abi.encodePacked("data:application/json;base64,", Base64.encode(bytes(json))));
+    }
+
+    function _collectionSvg() internal pure returns (string memory) {
+        return string(abi.encodePacked(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">',
+              '<rect width="600" height="600" fill="#08080a"/>',
+              '<rect x="20" y="20" width="560" height="560" fill="none" stroke="#f4c430" stroke-width="1" opacity="0.4"/>',
+              '<text x="300" y="280" fill="#f4c430" font-family="monospace" font-size="56" font-weight="700" text-anchor="middle">$PICK</text>',
+              '<text x="300" y="330" fill="#ededed" font-family="monospace" font-size="28" font-weight="700" text-anchor="middle">MINER AGENTS</text>',
+              '<text x="300" y="370" fill="#5a5a62" font-family="monospace" font-size="12" letter-spacing="4" text-anchor="middle">ERC-8004 IDENTITIES</text>',
+              '<text x="300" y="540" fill="#5a5a62" font-family="monospace" font-size="11" letter-spacing="3" text-anchor="middle">SOULBOUND  ON-CHAIN  MIT</text>',
+            '</svg>'
+        ));
+    }
+
+    // ───────── EIP-2981 royalty (0% — soulbound, signaling-only) ─────────
+
+    function royaltyInfo(uint256 /*tokenId*/, uint256 /*salePrice*/)
+        external pure override returns (address receiver, uint256 royaltyAmount)
+    {
+        return (address(0), 0);
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721, IERC165) returns (bool) {
+        return interfaceId == type(IERC2981).interfaceId
+            || super.supportsInterface(interfaceId);
     }
 
     function _buildTokenURI(uint256 tokenId, address owner, uint256 pickHeld)
