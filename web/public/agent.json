@@ -6,8 +6,8 @@
   "type": "token-agent",
   "endpoints": {
     "contract": "ethereum://DMN_MAINNET_ADDRESS",
-    "frontend": "https://CUSTOM_DOMAIN_TBD",
-    "whitepaper": "https://CUSTOM_DOMAIN_TBD/whitepaper.pdf",
+    "frontend": "https://daemonerc8004.com",
+    "whitepaper": "https://daemonerc8004.com/whitepaper.pdf",
     "source": "https://github.com/wayne97dev/mineeth"
   },
   "capabilities": [
