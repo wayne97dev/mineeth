@@ -26,7 +26,11 @@ function StatCard({ label, value, hint }: StatCardProps) {
 }
 
 function ProgressBar({ value, max }: { value: bigint; max: bigint }) {
-  const pct = max === 0n ? 0 : Number((value * 10000n) / max) / 100;
+  // Scale by 1e10 before integer division so we keep 8 decimal places of
+  // precision in the percentage (otherwise tiny ratios like 300 / 18.9M
+  // truncate to 0).
+  const pct =
+    max === 0n ? 0 : Number((value * 10_000_000_000n) / max) / 1e8;
   return (
     <div>
       <div
@@ -43,7 +47,7 @@ function ProgressBar({ value, max }: { value: bigint; max: bigint }) {
       </div>
       <div className="flex justify-between mt-1 text-xs font-mono"
            style={{ color: "var(--fg-muted)" }}>
-        <span>{pct.toFixed(4)}%</span>
+        <span>{formatPct(pct)}</span>
         <span>
           {formatUnits(value, 18).split(".")[0]} /{" "}
           {formatUnits(max, 18).split(".")[0]} DMN
@@ -51,6 +55,16 @@ function ProgressBar({ value, max }: { value: bigint; max: bigint }) {
       </div>
     </div>
   );
+}
+
+function formatPct(pct: number): string {
+  if (pct === 0) return "0%";
+  // Below 0.0001% even 4 decimals collapse to 0.0000 — show as inequality
+  // so the user can tell mining is in progress, just very early.
+  if (pct < 0.0001) return "<0.0001%";
+  if (pct < 1) return `${pct.toFixed(4)}%`;
+  if (pct < 100) return `${pct.toFixed(2)}%`;
+  return "100%";
 }
 
 function formatDifficulty(d: bigint): string {
