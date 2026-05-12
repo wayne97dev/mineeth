@@ -49,6 +49,30 @@ export default function Page() {
           <div>retarget: every 2,016 mints, ±4× clamped</div>
           <div>halving: every 100,000 mints</div>
           <div>swap fee: 1% to controller</div>
+          <div className="pt-3">
+            ERC-8004 registry (mainnet):{" "}
+            <a
+              href="https://etherscan.io/address/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline"
+              style={{ color: "var(--accent)" }}
+            >
+              0x8004A169…A432
+            </a>
+          </div>
+          <div>
+            agent manifest:{" "}
+            <a
+              href="/agent.json"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline"
+              style={{ color: "var(--accent)" }}
+            >
+              /agent.json
+            </a>
+          </div>
         </footer>
       </main>
     </>
