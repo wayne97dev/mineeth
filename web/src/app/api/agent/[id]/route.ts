@@ -51,6 +51,8 @@ const daemonAbi = parseAbi([
 // ───────── Tier definitions (mirror MinerAgent._tier) ─────────
 type Tier = {
   name: string;
+  /** Decentralized IPFS URI — let the consuming marketplace (OpenSea,
+   * MetaMask, Rarible, etc.) resolve through its preferred gateway. */
   image: string;
   /** Hex color with leading "#", used for OpenSea trait swatch */
   color: string;
@@ -60,11 +62,39 @@ type Tier = {
   minDmn: number;
 };
 
+// Pinata-pinned CIDv1 raw-codec hashes of the four tier artworks. The
+// content is content-addressed, so the CIDs are an immutable proof the
+// image never changed since pinning. Even if Pinata removes the pin,
+// anyone re-pinning the same PNG to IPFS gets the identical CID.
 const TIERS = {
-  gold:    { name: "Gold",     image: "/nft/gold.png",     color: "#f4c430", bg: "0e0a02", minDmn: 100_000 },
-  silver:  { name: "Silver",   image: "/nft/silver.png",   color: "#c0c0c8", bg: "0c0c10", minDmn:  10_000 },
-  bronze:  { name: "Bronze",   image: "/nft/bronze.png",   color: "#cd7f32", bg: "0e0801", minDmn:   1_000 },
-  initiate:{ name: "Initiate", image: "/nft/initiate.png", color: "#7a7a82", bg: "08080a", minDmn:       0 },
+  gold: {
+    name: "Gold",
+    image: "ipfs://bafkreidcfqawzolh6rxc4hl2qq43cagmwgqwr5xjo5wnubrho7etrhu724",
+    color: "#f4c430",
+    bg: "0e0a02",
+    minDmn: 100_000,
+  },
+  silver: {
+    name: "Silver",
+    image: "ipfs://bafkreiflpuppfyebzcyerk2libizrdosklefg46ztnyymvsvmwnnsdgv24",
+    color: "#c0c0c8",
+    bg: "0c0c10",
+    minDmn: 10_000,
+  },
+  bronze: {
+    name: "Bronze",
+    image: "ipfs://bafkreigihsvsazqdyuykw4xsphzlhw6vgmd6is7so4y56s27ivmb7u4leq",
+    color: "#cd7f32",
+    bg: "0e0801",
+    minDmn: 1_000,
+  },
+  initiate: {
+    name: "Initiate",
+    image: "ipfs://bafkreifzpzicqem3o5rpcxgvxcz5xuj7tw5nfm7pde5l4ejsc4kepogr2e",
+    color: "#7a7a82",
+    bg: "08080a",
+    minDmn: 0,
+  },
 } as const satisfies Record<string, Tier>;
 
 function tierFor(balance: bigint): Tier {
@@ -120,10 +150,6 @@ export async function GET(
   const tier = tierFor(balance);
   const dmnHeld = Number(balance / 10n ** 18n);
 
-  // Resolve to absolute URL so OpenSea (which fetches from its own servers)
-  // can load the image.
-  const origin = new URL(request.url).origin;
-
   const metadata = {
     name: `Daemon Miner Agent #${tokenId}`,
     description:
@@ -131,7 +157,7 @@ export async function GET(
       "tier badge reflects live DMN holdings of the agent wallet, so the " +
       "NFT visually upgrades as you accumulate. Minimum 1 DMN held to " +
       "claim; transfers are blocked at the contract level.",
-    image: `${origin}${tier.image}`,
+    image: tier.image,
     // 6-char hex without "#" — OpenSea uses this as the card backdrop.
     background_color: tier.bg,
     // Per-token external link points at the holder's profile on Etherscan

@@ -10,13 +10,17 @@
 // This is a *static* response — nothing on-chain to look up. Cached
 // aggressively because it changes only when we want to rebrand the collection.
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 export const revalidate = 3600;
 
-export async function GET(request: NextRequest) {
-  const origin = new URL(request.url).origin;
+// Pinata-pinned tier artworks (CIDv1 raw codec). Same hashes used by
+// /api/agent/[id]/route.ts so the collection card and per-token images
+// share an immutable provenance.
+const IPFS_COLLECTION = "ipfs://bafkreibfix3x4i3tlgcauh7r3a7urflqc6q2jd4qqec4eusglxqhqrnpj4";
+const IPFS_GOLD       = "ipfs://bafkreidcfqawzolh6rxc4hl2qq43cagmwgqwr5xjo5wnubrho7etrhu724";
 
+export async function GET() {
   // OpenSea collection metadata standard:
   // https://docs.opensea.io/docs/contract-level-metadata
   const metadata = {
@@ -29,9 +33,9 @@ export async function GET(request: NextRequest) {
       "you accumulate. Tokens are non-transferable: a transfer attempt " +
       "reverts at the contract level. Royalties are 0% by design — these " +
       "are identity, not assets.",
-    image: `${origin}/nft/collection.png`,
-    banner_image: `${origin}/nft/collection.png`,
-    featured_image: `${origin}/nft/gold.png`,
+    image: IPFS_COLLECTION,
+    banner_image: IPFS_COLLECTION,
+    featured_image: IPFS_GOLD,
     external_link: "https://daemonerc8004.com",
     collaborators: [],
     // Royalty config — soulbound collection, no secondary trade signal.
